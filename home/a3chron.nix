@@ -7,6 +7,16 @@
 
   programs.home-manager.enable = true;
 
+  # Git
+  programs.git = {
+    enable = true;
+
+    settings.user = {
+      name  = "a3chron";
+      email = "kurt.schambach@gmail.com";
+    };
+  };
+
   # Shell
   programs.starship = {
     enable = true;

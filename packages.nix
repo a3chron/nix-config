@@ -8,4 +8,7 @@ with pkgs; [
   bash
   fish
   lm_sensors
+  
+  # could maybe be moved to flakes?
+  postgresql
 ]

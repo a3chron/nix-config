@@ -84,6 +84,9 @@
   # Enable docker
   virtualisation.docker.enable = true;
 
+  # Enable flatpak
+  services.flatpak.enable = true;
+
   # Enable a few exp feats
   nix.settings.experimental-features = ["nix-command" "flakes"];
 

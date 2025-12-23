@@ -6,7 +6,7 @@ palette = "catppuccin_mocha"
 
 # custom format
 format = """
-[╭─ $shell─────────────── $memory_usage ──╌╌ $nodejs$python$golang$ocaml $fill ╌╌─╮](overlay0)
+[╭─ $shell──$nix_shell───────────── $memory_usage ──╌╌ $nodejs$python$golang$ocaml $fill ╌╌─╮](overlay0)
 [├╌](overlay0)$sudo$username$hostname$localip$directory$read_only$git_branch$git_metrics [$fill $cmd_duration ┘](overlay0)
 [╰─ $battery $character](overlay0) """
 
@@ -54,7 +54,14 @@ bash_indicator = 'bash'
 unknown_indicator = 'unknwn'
 style = 'green'
 disabled = false
- 
+
+[nix_shell]
+disabled = false
+impure_msg = '[\[impure\]](flamingo)'
+pure_msg = '[\[pure\]](sapphire)'
+unknown_msg = '[\[unknown\]](dimmed sapphire)'
+format = '╌╌ [$name](dimmed teal)$state ╌╌'
+
 [username]
 style_user = 'green bold'
 format = ' [$user@]($style)'

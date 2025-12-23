@@ -77,7 +77,7 @@
     gnome-extension-manager
 
     # other
-    bambu-studio
+    #bambu-studio
     neofetch
   ];
 }

@@ -81,6 +81,9 @@
   # Enable touchpad support (enabled default in most desktopManager).
   # services.xserver.libinput.enable = true;
 
+  # Enable docker
+  virtualisation.docker.enable = true;
+
   # Enable a few exp feats
   nix.settings.experimental-features = ["nix-command" "flakes"];
 
@@ -88,7 +91,7 @@
   users.users.a3chron = {
     isNormalUser = true;
     description = "a3chron";
-    extraGroups = [ "networkmanager" "wheel" "plugdev" ];
+    extraGroups = [ "networkmanager" "wheel" "plugdev" "docker" ];
     # Set fish as default shell
     shell = pkgs.fish;
     packages = with pkgs; [

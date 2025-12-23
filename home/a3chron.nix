@@ -26,6 +26,8 @@
     enableBashIntegration = true;
     enableFishIntegration = true;
   };
+  programs.fish.enable = true;
+  programs.bash.enable = true;
 
   # Theme
   gtk = {

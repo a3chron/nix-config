@@ -29,6 +29,17 @@
   programs.fish.enable = true;
   programs.bash.enable = true;
 
+  home.file.".config/starship-themes/red.toml".source = ./starship-themes/red.toml;
+  home.file.".config/starship-themes/blue.toml".source = ./starship-themes/blue.toml;
+  home.file.".config/starship-themes/green.toml".source = ./starship-themes/green.toml;
+
+  # Create initial symlink (only runs if file doesn't exist)
+  home.activation.setupStarshipTheme = config.lib.dag.entryAfter ["writeBoundary"] ''
+    if [ ! -e "$HOME/.config/starship.toml" ]; then
+      $DRY_RUN_CMD ln -s "$HOME/.config/starship-themes/blue.toml" "$HOME/.config/starship.toml"
+    fi
+  '';
+
   # Theme
   gtk = {
     enable = true;
@@ -77,7 +88,23 @@
     gnome-extension-manager
 
     # other
-    #bambu-studio
+    #bambu-studio //TODO: currently installed via flatpak, somehow move to nix config
+    blender
     neofetch
+
+    # custom bin scripts TODO: move to extra file
+    (pkgs.writeShellScriptBin "starship-theme" ''
+      THEME="$1"
+      THEMES="$HOME/.config/starship-themes"
+      ACTIVE="$HOME/.config/starship.toml"
+
+      if [[ ! "$THEME" =~ ^(red|blue|green)$ ]]; then
+          echo "Usage: starship-theme [red|blue|green]"
+          exit 1
+      fi
+
+      ln -sf "$THEMES/$THEME.toml" "$ACTIVE"
+      echo "✨ Starship theme switched to $THEME"
+    '')
   ];
 }

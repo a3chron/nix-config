@@ -21,8 +21,6 @@
   programs.starship = {
     enable = true;
 
-    settings = pkgs.lib.importTOML ./starship-themes/starship-active.toml;
-
     enableBashIntegration = true;
     enableFishIntegration = true;
   };
@@ -80,6 +78,7 @@
     starship
     vscodium
     vlc
+    neovim
 
     # gnome
     gnome-tweaks

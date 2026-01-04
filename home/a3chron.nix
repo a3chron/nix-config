@@ -24,7 +24,6 @@
     enableBashIntegration = true;
     enableFishIntegration = true;
   };
-  programs.fish.enable = true;
   programs.bash.enable = true;
 
   home.file.".config/starship-themes/red.toml".source = ./starship-themes/red.toml;
@@ -37,6 +36,52 @@
       $DRY_RUN_CMD ln -s "$HOME/.config/starship-themes/blue.toml" "$HOME/.config/starship.toml"
     fi
   '';
+
+  programs.fish = {
+  enable = true;
+
+  # Fish
+  functions.fish_greeting = {
+    body = ''
+      set hour (date +%H)
+
+      if test $hour -lt 12
+        set greeting "Good morning"
+      else if test $hour -lt 18
+        set greeting "Good afternoon"
+      else
+        set greeting "Good evening"
+      end
+
+      echo "$greeting a3chron"
+    '';
+    };
+  };
+  
+  # Neovim
+  programs.neovim = {
+    enable = true;
+    plugins = with pkgs.vimPlugins; [
+      catppuccin-nvim
+      nvim-treesitter
+      telescope-nvim
+      nvim-lspconfig
+    ];
+    extraLuaConfig = ''
+      -- Set Catppuccin colorscheme
+      vim.cmd.colorscheme "catppuccin"
+
+      require("catppuccin").setup({
+        flavour = "mocha",
+      })
+      vim.cmd.colorscheme "catppuccin"
+
+			vim.opt.number = true
+			vim.opt.relativenumber = true
+			vim.opt.ts = 2
+			vim.opt.shiftwidth = 2
+    '';
+  };
 
   # Theme
   gtk = {
@@ -61,6 +106,43 @@
     x11.enable = true;
   };
 
+  systemd.user.services.vicinae = {
+		Unit = {
+			Description = "Vicinae server";
+			After = [ "graphical-session.target" ];
+		};
+
+		Service = {
+			ExecStart = "${pkgs.vicinae}/bin/vicinae server";
+			Restart = "always";
+			RestartSec = 2;
+		};
+
+		Install = {
+			WantedBy = [ "graphical-session.target" ];
+		};
+	};
+
+  dconf.settings = {
+		"org/gnome/settings-daemon/plugins/media-keys" = {
+			custom-keybindings = [
+				"/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/terminal/"
+				"/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/vicinae/"
+			];
+		};
+
+		"org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/terminal" = {
+			name = "Terminal";
+			command = "${pkgs.alacritty}/bin/alacritty";
+			binding = "<Ctrl><Alt>t";
+		};
+
+		"org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/vicinae" = {
+			name = "Vicinae Toggle";
+			command = "${pkgs.vicinae}/bin/vicinae toggle";
+			binding = "<Ctrl>space";
+		};
+	};
 
   # Custom window buttons
   home.file.".config/gtk-3.0/custom-window-buttons.css".source = ./window-buttons.css;
@@ -78,7 +160,7 @@
     starship
     vscodium
     vlc
-    neovim
+    vicinae
 
     # gnome
     gnome-tweaks
@@ -90,6 +172,7 @@
     #bambu-studio //TODO: currently installed via flatpak, somehow move to nix config
     blender
     neofetch
+    steam
 
     # custom bin scripts TODO: move to extra file
     (pkgs.writeShellScriptBin "starship-theme" ''

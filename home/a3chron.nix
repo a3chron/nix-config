@@ -16,8 +16,16 @@
       email = "kurt.schambach@gmail.com";
     };
   };
-
   # Shell
+	programs.ghostty.enable = true;
+
+  xdg.configFile."ghostty/config".text = ''
+    theme = dark:Catppuccin Mocha,light:Catppuccin Latte
+		background-opacity = 0.97
+		window-decoration = server
+  '';
+
+  # Shell Prompt
   programs.starship = {
     enable = true;
 
@@ -73,6 +81,7 @@
 
       require("catppuccin").setup({
         flavour = "mocha",
+				transparent_background = true,
       })
       vim.cmd.colorscheme "catppuccin"
 
@@ -96,6 +105,14 @@
       name = "Flat-Remix-Blue-Dark";
       package = pkgs.flat-remix-icon-theme;
     };
+
+		gtk3.extraCss = ''
+			@import url("custom-window-buttons.css");
+		'';
+
+		gtk4.extraCss = ''
+			@import url("custom-window-buttons.css");
+		'';
   };
 
   home.pointerCursor = {
@@ -133,7 +150,7 @@
 
 		"org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/terminal" = {
 			name = "Terminal";
-			command = "${pkgs.alacritty}/bin/alacritty";
+			command = "${pkgs.ghostty}/bin/ghostty";
 			binding = "<Ctrl><Alt>t";
 		};
 
@@ -144,15 +161,9 @@
 		};
 	};
 
-  # Custom window buttons
-  home.file.".config/gtk-3.0/custom-window-buttons.css".source = ./window-buttons.css;
-  home.file.".config/gtk-4.0/custom-window-buttons.css".source = ./window-buttons.css;
-
-  # Tell GTK to load them
-  home.sessionVariables = {
-    GTK_CSS  = "$HOME/.config/gtk-3.0/custom-window-buttons.css";
-    GTK_CSS4 = "$HOME/.config/gtk-4.0/custom-window-buttons.css";
-  };
+  # Import the CSS file for both GTK 3 and GTK 4
+	home.file.".config/gtk-3.0/custom-window-buttons.css".source = ./window-buttons.css;
+	home.file.".config/gtk-4.0/custom-window-buttons.css".source = ./window-buttons.css;
 
   # User Packages
   home.packages = with pkgs; [

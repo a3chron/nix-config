@@ -18,11 +18,22 @@
   };
   # Shell
 	programs.ghostty.enable = true;
-
+  
+	# TODO: move to extra file
   xdg.configFile."ghostty/config".text = ''
     theme = dark:Catppuccin Mocha,light:Catppuccin Latte
-		background-opacity = 0.97
-		window-decoration = server
+		background-opacity = 0.93
+		selection-foreground = #000
+		selection-background = #FEE
+		cursor-style = block
+		shell-integration-features = no-cursor
+		cursor-text = #000
+		window-padding-x = 4
+		window-padding-y = 2
+		window-padding-balance = true
+		window-theme = ghostty
+    resize-overlay-position = bottom-right
+
   '';
 
   # Shell Prompt

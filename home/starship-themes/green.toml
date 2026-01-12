@@ -7,7 +7,7 @@ palette = "catppuccin_mocha"
 # custom format
 format = """
 [╭─ $shell──$nix_shell───────────── $memory_usage ──╌╌ $nodejs$python$golang$ocaml $fill ╌╌─╮](overlay0)
-[├╌](overlay0)$sudo$username$hostname$localip$directory$read_only$git_branch$git_metrics [$fill $cmd_duration ┘](overlay0)
+[├╌](overlay0)$sudo$username$hostname$localip$directory$read_only$git_branch$git_commit$git_metrics [$fill $cmd_duration ┘](overlay0)
 [╰─ $battery $character](overlay0) """
 
 #format = '$all$directory$character'
@@ -111,7 +111,13 @@ disabled = false
 [git_metrics]
 disabled = false
 format = ' [+$added](bold green)[-$deleted](bold maroon)'
- 
+
+[git_commit]
+format = ' [$tag](dimmed green)'
+tag_disabled = false
+tag_symbol = ''
+only_detached = false
+
 [git_branch]
 format = '[$branch(:$remote_branch)]($style)'
 style = 'bold dimmed teal'

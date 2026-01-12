@@ -119,6 +119,7 @@ style = 'bold pink'
 [git_commit]
 format = ' [$tag](dimmed pink)'
 tag_disabled = false
+tag_symbol = ''
 only_detached = false
 
 [fill]

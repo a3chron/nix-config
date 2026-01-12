@@ -68,8 +68,10 @@
         set greeting "Good morning"
       else if test $hour -lt 18
         set greeting "Good afternoon"
-      else
+      else if test $hour -lt 21
         set greeting "Good evening"
+			else
+				set greeting "Stayin up late, ain't we"
       end
 
       echo "$greeting a3chron"
@@ -183,6 +185,7 @@
     vscodium
     vlc
     vicinae
+		obs-studio
 
     # gnome
     gnome-tweaks
@@ -194,6 +197,7 @@
     #bambu-studio //TODO: currently installed via flatpak, somehow move to nix config
     blender
     neofetch
+		bagels
     steam
 
     # custom bin scripts TODO: move to extra file

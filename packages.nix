@@ -8,6 +8,9 @@ with pkgs; [
   bash
   fish
   lm_sensors
+
+	lenovo-legion
+  pkgs.linuxKernel.packages.linux_6_12.lenovo-legion-module
   
   # could maybe be moved to flakes?
   postgresql

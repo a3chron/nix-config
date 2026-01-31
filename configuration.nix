@@ -14,6 +14,14 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
+	boot = {
+    extraModulePackages = with config.boot.kernelPackages; [
+      lenovo-legion-module
+    ];
+
+    kernelModules = [ "lenovo-legion-module" ];
+  };
+
   boot.initrd.luks.devices."luks-9447e4e0-cba3-49a5-87df-ebdc7788c44e".device = "/dev/disk/by-uuid/9447e4e0-cba3-49a5-87df-ebdc7788c44e";
   networking.hostName = "nixos"; # Define your hostname.
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.

@@ -4,6 +4,9 @@
   home.username = "a3chron";
   home.homeDirectory = "/home/a3chron";
   home.stateVersion = "25.11";
+	home.sessionPath = [
+		"$HOME/.local/bin"
+	];
 
   programs.home-manager.enable = true;
 
@@ -22,7 +25,7 @@
 	# TODO: move to extra file
   xdg.configFile."ghostty/config".text = ''
     theme = dark:Catppuccin Mocha,light:Catppuccin Latte
-		background-opacity = 0.93
+		background-opacity = 1.00
 		selection-foreground = #000
 		selection-background = #FEE
 		cursor-style = block
@@ -33,7 +36,6 @@
 		window-padding-balance = true
 		window-theme = ghostty
     resize-overlay-position = bottom-right
-
   '';
 
   # Shell Prompt
@@ -44,68 +46,62 @@
     enableFishIntegration = true;
   };
   programs.bash.enable = true;
-
-  home.file.".config/starship-themes/red.toml".source = ./starship-themes/red.toml;
-  home.file.".config/starship-themes/blue.toml".source = ./starship-themes/blue.toml;
-  home.file.".config/starship-themes/green.toml".source = ./starship-themes/green.toml;
-
-  # Create initial symlink (only runs if file doesn't exist)
-  home.activation.setupStarshipTheme = config.lib.dag.entryAfter ["writeBoundary"] ''
-    if [ ! -e "$HOME/.config/starship.toml" ]; then
-      $DRY_RUN_CMD ln -s "$HOME/.config/starship-themes/blue.toml" "$HOME/.config/starship.toml"
-    fi
-  '';
-
   programs.fish = {
-  enable = true;
+		enable = true;
 
-  # Fish
-  functions.fish_greeting = {
-    body = ''
-      set hour (date +%H)
+		# Fish
+		functions.fish_greeting = {
+			body = ''
+				set hour (date +%H)
 
-      if test $hour -lt 12
-        set greeting "Good morning"
-      else if test $hour -lt 18
-        set greeting "Good afternoon"
-      else if test $hour -lt 21
-        set greeting "Good evening"
-			else
-				set greeting "Stayin up late, ain't we"
-      end
+				if test $hour -lt 12
+					set greeting "Good morning"
+				else if test $hour -lt 18
+					set greeting "Good afternoon"
+				else if test $hour -lt 21
+					set greeting "Good evening"
+				else
+					set greeting "Stayin up late, ain't we"
+				end
 
-      echo "$greeting a3chron"
-    '';
-    };
-  };
+				echo "$greeting a3chron"
+			'';
+		};
+	};
   
   # Neovim
-  programs.neovim = {
-    enable = true;
-    plugins = with pkgs.vimPlugins; [
-      catppuccin-nvim
-      nvim-treesitter
-      telescope-nvim
-      nvim-lspconfig
-    ];
-    extraLuaConfig = ''
-      -- Set Catppuccin colorscheme
-      vim.cmd.colorscheme "catppuccin"
-
-      require("catppuccin").setup({
-        flavour = "mocha",
+	programs.neovim = {
+		enable = true;
+		plugins = with pkgs.vimPlugins; [
+			catppuccin-nvim
+			nvim-treesitter.withAllGrammars
+			telescope-nvim
+			nvim-lspconfig
+		];
+		extraLuaConfig = ''
+			-- Set Catppuccin colorscheme
+			vim.cmd.colorscheme "catppuccin"
+			require("catppuccin").setup({
+				flavour = "mocha",
 				transparent_background = true,
-      })
-      vim.cmd.colorscheme "catppuccin"
-
+			})
+			vim.cmd.colorscheme "catppuccin"
 			vim.opt.number = true
 			vim.opt.relativenumber = true
 			vim.opt.ts = 2
 			vim.opt.shiftwidth = 2
-    '';
-  };
 
-  # Theme
+			-- Enable Treesitter highlighting
+			require('nvim-treesitter.configs').setup({
+				highlight = {
+					enable = true,
+				},
+			})
+		'';
+	};
+
+
+	# Theme
   gtk = {
     enable = true;
 
@@ -186,6 +182,7 @@
     vlc
     vicinae
 		obs-studio
+		claude-code
 
     # gnome
     gnome-tweaks
@@ -199,20 +196,5 @@
     neofetch
 		bagels
     steam
-
-    # custom bin scripts TODO: move to extra file
-    (pkgs.writeShellScriptBin "starship-theme" ''
-      THEME="$1"
-      THEMES="$HOME/.config/starship-themes"
-      ACTIVE="$HOME/.config/starship.toml"
-
-      if [[ ! "$THEME" =~ ^(red|blue|green)$ ]]; then
-          echo "Usage: starship-theme [red|blue|green]"
-          exit 1
-      fi
-
-      ln -sf "$THEMES/$THEME.toml" "$ACTIVE"
-      echo "✨ Starship theme switched to $THEME"
-    '')
   ];
 }

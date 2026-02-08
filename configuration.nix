@@ -114,7 +114,7 @@
 
   # Steam
   nixpkgs.config.allowUnfreePredicate = pkg:
-    builtins.elem (pkgs.lib.getName pkg) [ "steam" "steam-unwrapped" ];
+    builtins.elem (pkgs.lib.getName pkg) [ "steam" "steam-unwrapped" "claude-code" ];
   
   programs.steam = {
     enable = true;

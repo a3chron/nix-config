@@ -77,6 +77,8 @@
 			nvim-treesitter.withAllGrammars
 			telescope-nvim
 			nvim-lspconfig
+			zen-mode-nvim
+			nvim-autopairs
 		];
 		extraLuaConfig = ''
 			-- Set Catppuccin colorscheme
@@ -96,6 +98,31 @@
 				highlight = {
 					enable = true,
 				},
+			})
+
+			-- ZenMode setup
+			require("zen-mode").setup({
+				window = {
+					width = 90,
+				},
+			})
+			vim.keymap.set("n", "<leader>z", "<cmd>ZenMode<cr>")
+			vim.api.nvim_create_user_command("Zen", "ZenMode", {})
+			vim.cmd("cabbrev zen ZenMode")
+
+			-- Auto-enter ZenMode for markdown files
+			vim.api.nvim_create_autocmd("FileType", {
+				pattern = "markdown",
+				callback = function()
+					vim.schedule(function()
+						require("zen-mode").toggle()
+					end)
+				end,
+			})
+
+			-- Auto-closing brackets
+			require("nvim-autopairs").setup({
+				check_ts = true,
 			})
 		'';
 	};
@@ -183,6 +210,7 @@
     vicinae
 		obs-studio
 		claude-code
+		kdePackages.ghostwriter
 
     # gnome
     gnome-tweaks

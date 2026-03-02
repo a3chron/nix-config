@@ -11,6 +11,13 @@ with pkgs; [
 
 	lenovo-legion
   pkgs.linuxKernel.packages.linux_6_12.lenovo-legion-module
+
+	# hyperland
+	wl-clipboard
+	wofi
+	hyprshot
+	hyprlock
+	hyprpaper
   
   # could maybe be moved to flakes?
   postgresql

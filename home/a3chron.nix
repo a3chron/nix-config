@@ -207,6 +207,9 @@
 	home.file.".config/gtk-3.0/custom-window-buttons.css".source = ./window-buttons.css;
 	home.file.".config/gtk-4.0/custom-window-buttons.css".source = ./window-buttons.css;
 
+	# Populate hyperland config
+	home.file.".config/hypr/hyperland.conf".source = ./hyperland.conf;
+
 	# For Nerd fonts
 	fonts.fontconfig.enable = true;
 
@@ -219,8 +222,8 @@
     vicinae
 		obs-studio
 		claude-code
-		kdePackages.ghostwriter
 		prismlauncher
+		obsidian
 
     # gnome
     gnome-tweaks

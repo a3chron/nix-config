@@ -110,11 +110,18 @@
     #  thunderbird
     ];
   };
+
+	programs.hyprland = {
+		enable = true;
+		withUWSM = true;
+		xwayland.enable = true;
+	};
+
   programs.fish.enable = true;
 
   # Steam
   nixpkgs.config.allowUnfreePredicate = pkg:
-    builtins.elem (pkgs.lib.getName pkg) [ "steam" "steam-unwrapped" "claude-code" ];
+    builtins.elem (pkgs.lib.getName pkg) [ "steam" "steam-unwrapped" "claude-code" "1password" "1password-cli" ];
   
   programs.steam = {
     enable = true;
@@ -124,6 +131,17 @@
 
   # Install firefox.
   programs.firefox.enable = true;
+
+	# 1passwd
+	# Enables the 1Password CLI
+	programs._1password = { enable = true; };
+
+	# Enables the 1Password desktop app
+	programs._1password-gui = {
+	enable = true;
+		# this makes system auth etc. work properly
+		polkitPolicyOwners = [ "a3chron" ];
+	};
 
   # List packages installed in system profile. To search, run:
   # $ nix search wget

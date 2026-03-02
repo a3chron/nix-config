@@ -4,6 +4,9 @@
   home.username = "a3chron";
   home.homeDirectory = "/home/a3chron";
   home.stateVersion = "25.11";
+	home.sessionVariables = {
+		GTK_IM_MODULE = "simple"; # Fix ghostty dead-key (`)
+	};
 	home.sessionPath = [
 		"$HOME/.local/bin"
 	];
@@ -92,6 +95,9 @@
 			vim.opt.relativenumber = true
 			vim.opt.ts = 2
 			vim.opt.shiftwidth = 2
+
+			-- Exit insert mode with jk
+		  vim.keymap.set("i", "jk", "<Esc>")
 
 			-- Enable Treesitter highlighting
 			require('nvim-treesitter.configs').setup({
@@ -201,6 +207,9 @@
 	home.file.".config/gtk-3.0/custom-window-buttons.css".source = ./window-buttons.css;
 	home.file.".config/gtk-4.0/custom-window-buttons.css".source = ./window-buttons.css;
 
+	# For Nerd fonts
+	fonts.fontconfig.enable = true;
+
   # User Packages
   home.packages = with pkgs; [
     # basics
@@ -211,6 +220,7 @@
 		obs-studio
 		claude-code
 		kdePackages.ghostwriter
+		prismlauncher
 
     # gnome
     gnome-tweaks
@@ -224,5 +234,6 @@
     neofetch
 		bagels
     steam
+		nerd-fonts.jetbrains-mono
   ];
 }

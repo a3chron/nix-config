@@ -208,7 +208,7 @@
 	home.file.".config/gtk-4.0/custom-window-buttons.css".source = ./window-buttons.css;
 
 	# Populate hyperland config
-	home.file.".config/hypr/hyperland.conf".source = ./hyperland.conf;
+		home.file.".config/hypr/hyprland.conf".source = ./hyprland.conf;
 
 	# For Nerd fonts
 	fonts.fontconfig.enable = true;

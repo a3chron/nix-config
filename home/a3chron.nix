@@ -133,6 +133,58 @@
 		'';
 	};
 
+	programs.vscode = {
+		enable = true;
+		package = pkgs.vscodium;
+
+		profiles.default = {
+			extensions = (with pkgs.vscode-extensions; [
+				anthropic.claude-code
+				biomejs.biome
+				bradlc.vscode-tailwindcss
+				catppuccin.catppuccin-vsc
+				golang.go
+				jnoortheen.nix-ide
+				unifiedjs.vscode-mdx
+			]) ++ (pkgs.vscode-utils.extensionsFromVscodeMarketplace [
+				{
+					name = "catppuccin-noctis-icons";
+					publisher = "alexdauenhauer";
+					version = "0.3.0";
+					sha256 = "sha256-fubzcWxEZ7zSLbJKqbmto+tNg9W7i0x3zI9LJHB4OcQ=";
+				}
+				{
+					name = "qt-core";
+					publisher = "theqtcompany";
+					version = "1.12.0";
+					sha256 = "sha256-X8YzpmZbMWAfLv3YjBr/jDqEMakzUBNQViiJLXah+3I=";
+				}
+				{
+					name = "qt-qml";
+					publisher = "theqtcompany";
+					version = "1.12.0";
+					sha256 = "sha256-LNfVsmM4Wiv5RWk5ne2Z0lOonPEFH2405xKX/D3eCgY=";
+				}
+				{
+					name = "vscode-todo-highlight";
+					publisher = "wayou";
+					version = "1.0.5";
+					sha256 = "sha256-CQVtMdt/fZcNIbH/KybJixnLqCsz5iF1U0k+GfL65Ok=";
+				}
+			]);
+
+			userSettings = {
+				"workbench.colorTheme" = "Catppuccin Mocha";
+				"workbench.iconTheme" = "catppuccin noctis icons";
+				"catppuccin-noctis-icons.hidesExplorerArrows" = false;
+				"workbench.editorAssociations" = {
+					"{git,gitlens,chat-editing-snapshot-text-model,copilot,git-graph,git-graph-3}:/**/*.qrc" = "default";
+					"*.qrc" = "qt-core.qrcEditor";
+				};
+				"window.controlsStyle" = "custom";
+			};
+		};
+	};
 
 	# Theme
   gtk = {

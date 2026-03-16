@@ -2,15 +2,12 @@
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 {
-  imports =
-    [ # Include the results of the hardware scan.
-      ./hardware-configuration.nix
-    ];
+	imports = [ ./hardware-config-pc.nix ];
 
-	swapDevices = [
+	swapDevices = lib.mkForce [
 		{
 			device = "/dev/nvme0n1p3";
 			randomEncryption.enable = true;
@@ -136,9 +133,9 @@
 	# udev rules for openrgb
 	services.udev.packages = [ pkgs.openrgb ];
 
-  # Steam
+  # All my unfree ones
   nixpkgs.config.allowUnfreePredicate = pkg:
-    builtins.elem (pkgs.lib.getName pkg) [ "steam" "steam-unwrapped" "claude-code" "1password" "1password-cli" "obsidian" ];
+    builtins.elem (pkgs.lib.getName pkg) [ "steam" "steam-unwrapped" "claude-code" "1password" "1password-cli" "obsidian" "vscode-extension-anthropic-claude-code" ];
   
   programs.steam = {
     enable = true;

@@ -175,6 +175,7 @@
 
 			userSettings = {
 				"workbench.colorTheme" = "Catppuccin Mocha";
+				"catppuccin.accentColor" = "blue";
 				"workbench.iconTheme" = "catppuccin noctis icons";
 				"catppuccin-noctis-icons.hidesExplorerArrows" = false;
 				"workbench.editorAssociations" = {

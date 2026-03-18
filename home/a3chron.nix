@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 {
   home.username = "a3chron";
@@ -262,6 +262,16 @@
 
 	# Populate hyperland config
 		home.file.".config/hypr/hyprland.conf".source = ./hyprland.conf;
+
+	# Ambxst config - conditional copy (only if dir doesn't exist)
+	# This keeps config declarative but allows in-app changes
+	home.activation.ambxstConfig = lib.hm.dag.entryAfter ["writeBoundary"] ''
+		if [ ! -d "$HOME/.config/ambxst" ]; then
+			mkdir -p "$HOME/.config/ambxst"
+			cp -r ${./ambxst}/* "$HOME/.config/ambxst/"
+			chmod -R u+w "$HOME/.config/ambxst"
+		fi
+	'';
 
 	# For Nerd fonts
 	fonts.fontconfig.enable = true;

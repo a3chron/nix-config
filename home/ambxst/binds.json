@@ -13,7 +13,7 @@
             "dispatcher": "exec",
             "key": "V",
             "modifiers": [
-                "SUPER"
+                "ALT"
             ]
         },
         "dashboard": {
@@ -700,12 +700,6 @@
                         "CTRL",
                         "ALT"
                     ]
-                },
-                {
-                    "key": "TAB",
-                    "modifiers": [
-                        "ALT"
-                    ]
                 }
             ],
             "name": "Next Occupied Workspace"
@@ -928,7 +922,7 @@
                     ]
                 },
                 {
-                    "key": "Top",
+                    "key": "Up",
                     "modifiers": [
                         "ALT"
                     ]
@@ -1975,6 +1969,27 @@
                 }
             ],
             "name": "Move Column To Workspace 10"
+        },
+        {
+            "actions": [
+                {
+                    "argument": "",
+                    "dispatcher": "togglefloating",
+                    "flags": "",
+                    "layouts": [
+                    ]
+                }
+            ],
+            "enabled": true,
+            "keys": [
+                {
+                    "key": "V",
+                    "modifiers": [
+                        "SUPER"
+                    ]
+                }
+            ],
+            "name": "Toggle Floating"
         }
     ],
     "defaultAmbxstBinds": {

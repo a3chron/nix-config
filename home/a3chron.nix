@@ -183,6 +183,7 @@
 					"*.qrc" = "qt-core.qrcEditor";
 				};
 				"window.controlsStyle" = "custom";
+				"terminal.integrated.defaultProfile.linux": "fish"
 			};
 		};
 	};

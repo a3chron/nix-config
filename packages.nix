@@ -13,6 +13,7 @@ with pkgs; [
 	hyprshot
 	hyprlock
 	hyprpaper
+	#hyprswitch
   
   # could maybe be moved to flakes?
   postgresql

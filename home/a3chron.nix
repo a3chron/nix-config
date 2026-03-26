@@ -184,6 +184,7 @@
 				};
 				"window.controlsStyle" = "custom";
 				"terminal.integrated.defaultProfile.linux" = "fish";
+				"editor.lineNumbers" = "relative";
 			};
 		};
 	};

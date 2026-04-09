@@ -18,7 +18,16 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
-	boot.kernelModules = [ "i2c-dev" "i2c-piix4" ];
+
+	# ==== Fans ====
+	boot.extraModulePackages = with config.boot.kernelPackages; [ nct6687d ];
+	boot.kernelModules = [ "i2c-dev" "i2c-piix4" "nct6687" ];
+	# Blacklist the in-kernel driver so it doesn't fight with nct6687
+	boot.blacklistedKernelModules = [ "nct6683" ];
+	boot.extraModprobeConfig = ''
+		options nct6687 fan_config=msi_alt1
+	'';
+
 
   networking.hostName = "nixos"; # Define your hostname.
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
@@ -132,6 +141,8 @@
 
 	# udev rules for openrgb
 	services.udev.packages = [ pkgs.openrgb ];
+
+	programs.coolercontrol.enable = true;
 
   # All my unfree ones
   nixpkgs.config.allowUnfreePredicate = pkg:

@@ -300,6 +300,7 @@
     # other
     #bambu-studio //TODO: currently installed via flatpak, somehow move to nix config
     blender
+		freecad
     neofetch
 		bagels
     steam

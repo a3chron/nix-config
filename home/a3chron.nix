@@ -304,6 +304,7 @@
     neofetch
 		bagels
     steam
+		kdePackages.kdenlive
 		nerd-fonts.jetbrains-mono
   ];
 }

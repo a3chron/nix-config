@@ -2,7 +2,7 @@
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, inputs, ... }:
 
 {
 	imports = [ ./hardware-config-pc.nix ];
@@ -135,6 +135,17 @@
 		enable = true;
 		withUWSM = true;
 		xwayland.enable = true;
+		package = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.hyprland;
+		portalPackage = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.xdg-desktop-portal-hyprland;
+	};
+
+	# Use mesa from Hyprland's nixpkgs to avoid version mismatch on stable NixOS
+	hardware.graphics = let
+		pkgs-unstable = inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+	in {
+		package = pkgs-unstable.mesa;
+		enable32Bit = true;
+		package32 = pkgs-unstable.pkgsi686Linux.mesa;
 	};
 
   programs.fish.enable = true;

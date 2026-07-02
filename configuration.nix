@@ -131,6 +131,9 @@
 	hardware.logitech.wireless.enable = true;
 	hardware.logitech.wireless.enableGraphical = true;
 
+	# Editing / GoPro
+	services.gvfs.enable = true;
+
 	programs.hyprland = {
 		enable = true;
 		withUWSM = true;

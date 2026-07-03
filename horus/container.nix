@@ -52,6 +52,21 @@ in
 			environment.loginShellInit = ''
 				if [ "$USER" = "horus" ]; then cd /home/horus/work; fi
 			'';
+
+			# WhatsApp bridge (Baileys) — queues messages even while the agent
+			# is not in use; pairs via QR printed to the journal / bridge.log
+			systemd.services.wa-bridge = {
+				description = "Horus WhatsApp bridge";
+				wantedBy = [ "multi-user.target" ];
+				after = [ "network.target" ];
+				serviceConfig = {
+					User = "horus";
+					WorkingDirectory = "/home/horus/work/bridge";
+					ExecStart = "${pkgs.nodejs_24}/bin/node /home/horus/work/bridge/server.js";
+					Restart = "always";
+					RestartSec = 5;
+				};
+			};
 		};
 	};
 }

@@ -35,9 +35,9 @@ let
 				printf 'container:  %s\n' "$(systemctl is-active container@horus.service)"
 				printf 'llama-swap: %s\n' "$(systemctl is-active llama-swap.service)"
 				if systemctl is-active -q llama-swap.service; then
-					printf 'loaded:     %s\n' \
-						"$(curl -sf --max-time 2 http://127.0.0.1:8080/running \
-							| jq -r '.running[]?.model // empty' 2>/dev/null || echo none)"
+					loaded=$(curl -sf --max-time 2 http://127.0.0.1:8080/running \
+						| jq -r '.running[]?.model' 2>/dev/null | paste -sd, -)
+					printf 'loaded:     %s\n' "''${loaded:-none}"
 				fi
 				for d in /sys/class/drm/card*/device; do
 					if [ -f "$d/mem_info_vram_used" ] && [ "$(cat "$d/mem_info_vram_total")" -gt 4000000000 ]; then

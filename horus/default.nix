@@ -7,5 +7,6 @@
 		./container.nix
 		./searxng.nix
 		./cli.nix
+		./voice.nix
 	];
 }

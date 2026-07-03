@@ -125,6 +125,13 @@ def main():
                         rec = None
                         print("responding...", flush=True)
                         subprocess.run(["horus-voice-respond", WAV], timeout=600)
+                        # drop paddle presses queued while we were busy responding —
+                        # they'd otherwise fire now and silently start a recording
+                        try:
+                            while dev.read_one() is not None:
+                                pass
+                        except BlockingIOError:
+                            pass
             else:
                 ui.write_event(ev)  # pass through play/pause etc.
                 ui.syn()

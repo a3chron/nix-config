@@ -1,11 +1,14 @@
-# Horus PTT daemon: grabs the headphone AVRCP input device, uses paddle-right
-# (KEY_NEXTSONG) as talk-toggle, re-injects everything else so normal media
-# keys keep working. Deterministic mic handling: explicitly switch the BT card
-# to HFP while recording, back to A2DP (LDAC) for playback.
+# Horus PTT daemon: paddle-right (KEY_NEXTSONG) starts a voice query.
+# Recording auto-stops on trailing silence (the headset sends NO AVRCP button
+# events while in HFP mode, so a second press cannot be the stop signal).
+# Audio: explicit BT profile switch to HFP for the mic, restored afterwards;
+# if the user was already on HFP (call/meeting), profiles are left untouched.
+import array
 import os
 import subprocess
 import sys
 import time
+import wave
 
 import evdev
 from evdev import InputDevice, UInput, ecodes
@@ -19,6 +22,13 @@ SOUNDS = "/run/current-system/sw/share/sounds/freedesktop/stereo"
 CHIME_START = f"{SOUNDS}/audio-volume-change.oga"
 CHIME_STOP = f"{SOUNDS}/complete.oga"
 
+RATE = 16000
+CHUNK_BYTES = RATE * 2 // 10        # 0.1s of s16 mono
+BASELINE_CHUNKS = 5                 # first 0.5s calibrates ambient noise
+SILENCE_HOLD_S = 1.2                # this much trailing quiet ends the recording
+MAX_RECORD_S = 45
+MIN_RECORD_S = 1.0
+
 
 def run(cmd, timeout=5):
     try:
@@ -28,19 +38,13 @@ def run(cmd, timeout=5):
         return None
 
 
-def chime(path):
-    # never let a stuck audio server stall the daemon
-    subprocess.Popen(["pw-play", path])
-
-
-def bt_source():
-    r = run(["pactl", "list", "sources", "short"])
-    if not r:
-        return None
-    for line in r.stdout.splitlines():
-        if "bluez_input" in line or ("bluez" in line and "monitor" not in line):
-            return line.split("\t")[1]
-    return None
+def chime(path, wait=True):
+    try:
+        p = subprocess.Popen(["pw-play", path])
+        if wait:
+            p.wait(timeout=4)
+    except Exception as e:
+        print(f"chime failed: {e}", file=sys.stderr, flush=True)
 
 
 def active_profile():
@@ -56,39 +60,116 @@ def active_profile():
     return None
 
 
-def start_recording():
-    chime(CHIME_START)
-    # remember what the user was on: if already HFP (e.g. in a meeting),
-    # don't touch profiles at all and restore to exactly this afterwards
+def bt_source():
+    r = run(["pactl", "list", "sources", "short"])
+    if not r:
+        return None
+    for line in r.stdout.splitlines():
+        if "bluez_input" in line and "monitor" not in line:
+            return line.split("\t")[1]
+    return None
+
+
+def wait_bt_sink(timeout_s=4.0):
+    end = time.time() + timeout_s
+    while time.time() < end:
+        r = run(["pactl", "list", "sinks", "short"])
+        if r and "bluez_output" in r.stdout:
+            time.sleep(0.4)  # small extra settle after the sink appears
+            return True
+        time.sleep(0.3)
+    return False
+
+
+def rms(chunk):
+    samples = array.array("h", chunk[: len(chunk) - (len(chunk) % 2)])
+    if not samples:
+        return 0
+    return int((sum(s * s for s in samples) / len(samples)) ** 0.5)
+
+
+def record_until_silence():
+    """Returns path to wav, or None if nothing usable was captured."""
     prev = active_profile()
-    if prev is None or not prev.startswith("headset-head-unit"):
+    was_hfp = prev is not None and prev.startswith("headset-head-unit")
+
+    chime(CHIME_START, wait=True)  # finish the blip BEFORE we tear down A2DP
+    if not was_hfp:
         run(["pactl", "set-card-profile", CARD, "headset-head-unit"])
+
     source = None
-    for _ in range(10):  # wait for the HFP source to appear
+    for _ in range(12):
         source = bt_source()
         if source:
             break
         time.sleep(0.3)
     if not source:
         print("no bluetooth mic source found", file=sys.stderr, flush=True)
-        if prev:
+        if prev and not was_hfp:
             run(["pactl", "set-card-profile", CARD, prev])
         return None
-    time.sleep(0.5)  # let the profile settle so the wav isn't empty at the start
+    time.sleep(0.4)
+
     print(f"recording from {source} (was on {prev})", flush=True)
-    rec = subprocess.Popen(["pw-record", "--target", source, "--rate", "16000", "--channels", "1", WAV])
-    rec.horus_prev_profile = prev
-    return rec
+    rec = subprocess.Popen(
+        ["parec", f"--device={source}", "--format=s16le", f"--rate={RATE}", "--channels=1"],
+        stdout=subprocess.PIPE,
+    )
+    audio = bytearray()
+    baseline = None
+    baseline_samples = []
+    heard_speech = False
+    quiet_for = 0.0
+    started = time.time()
+    try:
+        while True:
+            chunk = rec.stdout.read(CHUNK_BYTES)
+            if not chunk:
+                break
+            audio.extend(chunk)
+            level = rms(chunk)
+            elapsed = time.time() - started
 
+            if baseline is None:
+                baseline_samples.append(level)
+                if len(baseline_samples) >= BASELINE_CHUNKS:
+                    baseline = max(100, sorted(baseline_samples)[len(baseline_samples) // 2])
+                continue
 
-def stop_recording(rec):
-    rec.terminate()
-    rec.wait()
-    prev = getattr(rec, "horus_prev_profile", None)
-    if prev and not prev.startswith("headset-head-unit"):
-        run(["pactl", "set-card-profile", CARD, prev])
-        time.sleep(0.5)  # settle before the confirmation chime
-    chime(CHIME_STOP)
+            speech_thresh = max(500, baseline * 3)
+            if level >= speech_thresh:
+                heard_speech = True
+                quiet_for = 0.0
+            else:
+                quiet_for += 0.1
+
+            if heard_speech and quiet_for >= SILENCE_HOLD_S and elapsed >= MIN_RECORD_S:
+                break
+            if elapsed >= MAX_RECORD_S:
+                break
+            if not heard_speech and elapsed >= 8.0:
+                break  # user pressed but never spoke
+    finally:
+        rec.terminate()
+        try:
+            rec.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            rec.kill()
+            rec.wait()
+        if not was_hfp and prev:
+            run(["pactl", "set-card-profile", CARD, prev])
+            wait_bt_sink()
+        chime(CHIME_STOP, wait=True)
+
+    if not heard_speech:
+        print("no speech detected", flush=True)
+        return None
+    with wave.open(WAV, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(RATE)
+        w.writeframes(bytes(audio))
+    return WAV
 
 
 def find_device():
@@ -113,34 +194,24 @@ def main():
     print(f"grabbing {dev.path} ({dev.name})", flush=True)
     dev.grab()
     ui = UInput.from_device(dev, name="horus-ptt-passthrough")
-    rec = None
     try:
         for ev in dev.read_loop():
             if ev.type == ecodes.EV_KEY and ev.code == PTT_KEY:
-                if ev.value == 1:  # key down = toggle
-                    if rec is None:
-                        rec = start_recording()
-                    else:
-                        stop_recording(rec)
-                        rec = None
+                if ev.value == 1:
+                    wav = record_until_silence()
+                    if wav:
                         print("responding...", flush=True)
-                        subprocess.run(["horus-voice-respond", WAV], timeout=600)
-                        # drop paddle presses queued while we were busy responding —
-                        # they'd otherwise fire now and silently start a recording
-                        try:
-                            while dev.read_one() is not None:
-                                pass
-                        except BlockingIOError:
+                        subprocess.run(["horus-voice-respond", wav], timeout=600)
+                    # drop paddle presses queued while we were busy
+                    try:
+                        while dev.read_one() is not None:
                             pass
+                    except BlockingIOError:
+                        pass
             else:
                 ui.write_event(ev)  # pass through play/pause etc.
                 ui.syn()
     finally:
-        if rec:
-            rec.terminate()
-            prev = getattr(rec, "horus_prev_profile", None)
-            if prev:
-                run(["pactl", "set-card-profile", CARD, prev])
         dev.ungrab()
 
 

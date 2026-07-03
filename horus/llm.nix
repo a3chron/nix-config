@@ -24,7 +24,7 @@ let
 					--cache-type-v q8_0
 					--ctx-size 32768
 					--n-gpu-layers 999
-					--n-cpu-moe 48
+					--n-cpu-moe 30
 				'';
 				ttl = 600; # unload after 10 min idle
 			};

@@ -24,13 +24,16 @@ let
 			# strip whisper noise markers like [BLANK_AUDIO], (bell), *music*
 			text=$(whisper-cli -m ${whisperModel} -f "$wav" --language en --no-timestamps 2>/dev/null \
 				| sed -E 's/\[[^]]*\]//g; s/\([^)]*\)//g; s/^ *//' | tr '\n' ' ')
+			text=$(echo "$text" | sed -E 's/^ +| +$//g')
 			echo "heard: $text"
 			if [ -z "''${text// /}" ]; then
 				pw-play "$sounds/dialog-warning.oga" & # didn't catch anything
 				exit 0
 			fi
+			# absolute machinectl path: the NOPASSWD sudoers rule matches exactly this;
+			# the unit's PATH would resolve to the raw nix-store path and get a password prompt
 			# JSON events -> just the assistant text parts, ANSI-free by construction
-			reply=$(sudo -n machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
+			reply=$(/run/wrappers/bin/sudo -n /run/current-system/sw/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
 				"cd /home/horus/work && opencode run --format json $(printf '%q' "$text") 2>/dev/null" \
 				| grep '^{' | jq -rs 'map(select(.type=="text") | .part.text) | join(" ")' 2>/dev/null || true)
 			echo "reply: $reply"

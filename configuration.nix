@@ -5,7 +5,7 @@
 { config, pkgs, lib, inputs, ... }:
 
 {
-	imports = [ ./hardware-config-pc.nix ];
+	imports = [ ./hardware-config-pc.nix ./horus ];
 
 	swapDevices = lib.mkForce [
 		{
@@ -105,6 +105,7 @@
 
   # Enable docker
   virtualisation.docker.enable = true;
+  virtualisation.docker.package = pkgs.docker_29;
 
   # Enable flatpak
   services.flatpak.enable = true;

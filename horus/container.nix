@@ -65,6 +65,9 @@ in
 					ExecStart = "${pkgs.nodejs_24}/bin/node /home/horus/work/bridge/server.js";
 					Restart = "always";
 					RestartSec = 5;
+					# QR + logs readable from the host at ~/horus/bridge/bridge.log
+					StandardOutput = "append:/home/horus/work/bridge/bridge.log";
+					StandardError = "append:/home/horus/work/bridge/bridge.log";
 				};
 			};
 		};

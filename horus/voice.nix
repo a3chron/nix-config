@@ -19,7 +19,7 @@ let
 		name = "horus-voice-respond";
 		runtimeInputs = [ whisper-cpp unstable.piper-tts pkgs.pipewire pkgs.pulseaudio pkgs.jq ];
 		text = ''
-			exec bash /home/a3chron/nixos-config/horus/horus-voice-respond.sh "$@"
+			exec ${pkgs.runtimeShell} /home/a3chron/nixos-config/horus/horus-voice-respond.sh "$@"
 		'';
 	};
 in

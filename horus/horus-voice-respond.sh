@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # STT -> agent -> TTS, one shot per utterance. Invoked by horus-ptt.py with
-# the recorded wav as $1. PATH (whisper-cli, piper, pw-play, jq) is provided
-# by the voiceRespond wrapper in voice.nix.
+# the recorded wav as $1. PATH (whisper-cli, piper, pw-play, pactl, jq) is
+# provided by the voiceRespond wrapper in voice.nix.
+#
+# Replies STREAM: each text part the agent emits is spoken as soon as it
+# arrives — so a "let me check..." acknowledgment plays while tools still run,
+# and long answers start speaking after the first chunk.
 set -uo pipefail
 
 sounds=/run/current-system/sw/share/sounds/freedesktop/stereo
 whisper_model=/var/lib/llm/models/ggml-large-v3-turbo.bin
 piper_voice=/var/lib/llm/models/piper-en_US-lessac-medium.onnx
 wav="$1"
+tmpdir=$(mktemp -d /tmp/horus-voice.XXXXXX)
+trap 'rm -rf "$tmpdir"' EXIT
 
 # play to the headphones explicitly: right after the HFP->A2DP flip the
 # *default* sink can briefly point elsewhere (e.g. easyeffects) and the
@@ -22,6 +28,24 @@ play() {
 	fi
 }
 
+# markdown -> speakable text, then synthesize + play (blocking, so parts queue)
+speak() {
+	local spoken
+	spoken=$(echo "$1" | sed -E \
+		-e 's/\*\*([^*]+)\*\*/\1/g' \
+		-e 's/\*([^*]+)\*/\1/g' \
+		-e 's/__([^_]+)__/\1/g' \
+		-e 's/`+([^`]+)`+/\1/g' \
+		-e 's/^#+ +//' \
+		-e 's/^ *[-*+] +//' \
+		-e 's/\[([^]]+)\]\([^)]*\)/\1/g' \
+		-e 's~https?://[^ )]+~ link ~g' \
+		-e 's/([0-9]+) *- *([0-9]+)/\1 to \2/g')
+	[ -z "${spoken// /}" ] && return 0
+	echo "$spoken" | piper --model "$piper_voice" --output_file "$tmpdir/part.wav" 2>/dev/null
+	play "$tmpdir/part.wav"
+}
+
 # strip whisper noise markers like [BLANK_AUDIO], (bell)
 text=$(whisper-cli -m "$whisper_model" -f "$wav" --language en --no-timestamps 2>/dev/null \
 	| sed -E 's/\[[^]]*\]//g; s/\([^)]*\)//g; s/^ +| +$//g' | tr '\n' ' ')
@@ -32,33 +56,28 @@ if [ -z "${text// /}" ]; then
 	exit 0
 fi
 
-# frame the query: STT mishears words, and the answer gets read aloud by TTS
+# frame the query: STT mishears, answers get read aloud, long tasks announced
 prompt="[Voice message from Kurt, speech-to-text may have misheard words — interpret \
-phonetically similar words from context (check memory/INDEX.md for topics). Answer in \
-1-3 short conversational sentences, no lists or markdown — it will be read aloud.] $text"
+phonetically similar words from context (check memory/INDEX.md for topics). Keep answers \
+SHORT and conversational (1-3 sentences), no lists or markdown — they are read aloud by TTS. \
+If the request needs tools or takes more than a few seconds: FIRST write one very short \
+sentence confirming what you are about to do (it is spoken immediately), then do the work, \
+then give a brief spoken-style result.] $text"
 
-# absolute machinectl path: the NOPASSWD sudoers rule matches exactly this
-# JSON events -> just the assistant text parts, ANSI-free by construction
-reply=$(/run/wrappers/bin/sudo -n /run/current-system/sw/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
-	"cd /home/horus/work && opencode run --format json $(printf '%q' "$prompt") 2>/dev/null" \
-	| grep '^{' | jq -rs 'map(select(.type=="text") | .part.text) | join(" ")' 2>/dev/null || true)
-echo "reply: $reply"
-if [ -z "${reply// /}" ]; then
-	play "$sounds/dialog-error.oga"
-	exit 0
+# absolute machinectl path: the NOPASSWD sudoers rule matches exactly this.
+# JSON events stream line-by-line; speak each text part as it arrives.
+/run/wrappers/bin/sudo -n /run/current-system/sw/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
+	"cd /home/horus/work && timeout 240 opencode run --format json $(printf '%q' "$prompt") 2>/dev/null" \
+	| tr -d '\r' | grep --line-buffered '^{' \
+	| jq --unbuffered -rc 'select(.type=="text") | .part.text | gsub("\n"; " ")' 2>/dev/null \
+	| while IFS= read -r part; do
+		[ -z "${part// /}" ] && continue
+		echo "reply part: $part"
+		touch "$tmpdir/spoke"
+		speak "$part"
+	done
+
+if [ ! -f "$tmpdir/spoke" ]; then
+	echo "no reply text received"
+	speak "Sorry, something went wrong — I didn't get an answer back."
 fi
-
-# strip markdown so the TTS doesn't say "asterisk asterisk"
-spoken=$(echo "$reply" | sed -E \
-	-e 's/\*\*([^*]+)\*\*/\1/g' \
-	-e 's/\*([^*]+)\*/\1/g' \
-	-e 's/__([^_]+)__/\1/g' \
-	-e 's/`+([^`]+)`+/\1/g' \
-	-e 's/^#+ +//' \
-	-e 's/^ *[-*+] +//' \
-	-e 's/\[([^]]+)\]\([^)]*\)/\1/g' \
-	-e 's~https?://[^ )]+~ link ~g' \
-	-e 's/([0-9]+) *- *([0-9]+)/\1 to \2/g')
-
-echo "$spoken" | piper --model "$piper_voice" --output_file /tmp/horus-reply.wav
-play /tmp/horus-reply.wav

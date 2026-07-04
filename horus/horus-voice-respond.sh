@@ -43,10 +43,13 @@ speak() {
 		-e 's/([0-9]+) *- *([0-9]+)/\1 to \2/g')
 	[ -z "${spoken// /}" ] && return 0
 	# Kokoro (am_michael); Piper stays as audible fallback if it ever fails
+	local t0
+	t0=$(date +%s%3N)
 	if ! horus-tts --out "$tmpdir/part.wav" "$spoken" 2>/dev/null; then
 		echo "kokoro failed, falling back to piper"
 		echo "$spoken" | piper --model "$piper_voice" --output_file "$tmpdir/part.wav" 2>/dev/null
 	fi
+	echo "synth: $(( $(date +%s%3N) - t0 ))ms"
 	play "$tmpdir/part.wav"
 }
 
@@ -60,20 +63,25 @@ if [ -z "${text// /}" ]; then
 	exit 0
 fi
 
-# frame the query: STT mishears, answers get read aloud, long tasks announced
+# frame the query. The announce mandate sits AFTER the transcript: tested
+# (2026-07-04) that trailing placement makes the model reliably emit the
+# announce as its own text step BEFORE tool calls, instead of pasting it
+# retroactively onto the final answer.
 prompt="[Voice message from Kurt, speech-to-text may have misheard words — interpret \
-phonetically similar words from context (check memory/INDEX.md for topics). Keep answers \
-SHORT and conversational (1-3 sentences), no lists or markdown — they are read aloud by TTS. \
-MANDATORY: if you are going to use ANY tool (API call, file access, search, anything that \
-takes time), the VERY FIRST thing in your reply — before the first tool call — must be one \
-short sentence saying what you are doing, like 'On it, checking Linear.' It is spoken to \
-Kurt immediately while you work. Only skip this for instant, tool-free answers.] $text"
+phonetically similar words from context (check memory/INDEX.md for topics).] \
+$text \
+[IMPORTANT: This is voice — your words are read aloud by TTS. ORDER OF OPERATIONS: if you will \
+use ANY tool, your turn must BEGIN with a text-only step: one short sentence saying what you're \
+doing (like 'On it, checking Linear.') — send that sentence FIRST, before your first tool call, \
+never merged into the final answer. Kurt hears it immediately; silence while tools run feels \
+broken. Then call tools. Then answer SHORT and conversational: 1-3 spoken sentences, absolutely \
+no lists, no markdown, no issue-ID dumps.]"
 
 # absolute machinectl path: the NOPASSWD sudoers rule matches exactly this.
 # JSON events stream line-by-line; speak each text part as it arrives.
 /run/wrappers/bin/sudo -n /run/current-system/sw/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
 	"cd /home/horus/work && timeout 240 opencode run --format json $(printf '%q' "$prompt") 2>/dev/null" \
-	| tr -d '\r' | grep --line-buffered '^{' \
+	| stdbuf -oL tr -d '\r' | grep --line-buffered '^{' \
 	| jq --unbuffered -rc 'select(.type=="text") | .part.text | gsub("\n"; " ")' 2>/dev/null \
 	| while IFS= read -r part; do
 		[ -z "${part// /}" ] && continue

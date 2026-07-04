@@ -1,7 +1,6 @@
 # Horus voice-log viewer (`horus log`): pretty, live view of the voice
-# pipeline journal. Shows only events since launch; `f` prints the full
-# retained transcript once, `q` quits. Catppuccin Mocha, names colored.
-# Prints to the normal buffer (no alt screen) so terminal scrollback works.
+# pipeline journal. Shows only events since launch; `f` toggles between that
+# and the full retained transcript, `q` quits. Catppuccin Mocha, names colored.
 import datetime
 import json
 import select
@@ -89,39 +88,42 @@ class Renderer:
         self.body(text)
         self.last_role = role
 
-    def rule(self, label):
-        plain = f"── {label} "
-        pad = "─" * max(0, self.width() - len(plain))
-        print(f"\n{SURFACE2}── {label} {pad}{RESET}")
-        self.last_role = None
-
-
-def print_full_history(r):
+def full_history_events():
     out = subprocess.run(
         ["journalctl", "--user", "-u", UNIT, "-o", "json", "--no-pager", "-n", "2000"],
         capture_output=True, text=True,
     ).stdout
-    r.rule("full transcript")
-    shown = 0
+    events = []
     for line in out.splitlines():
         try:
             ev = parse(json.loads(line))
         except json.JSONDecodeError:
             continue
         if ev:
-            r.event(*ev)
-            shown += 1
-    if not shown:
-        print(f"\n  {OVERLAY0}· journal is empty{RESET}")
-    r.rule("end of history — live again")
+            events.append(ev)
+    return events
+
+
+def redraw(r, title, events):
+    print("\x1b[H\x1b[2J", end="")  # clear screen, cursor home
+    print(f"{OVERLAY0}horus log — {title} · q quit{RESET}")
+    r.last_role = None
+    for ev in events:
+        r.event(*ev)
+    if not events:
+        print(f"\n  {OVERLAY0}· nothing yet{RESET}")
 
 
 def main():
     started = datetime.datetime.now().strftime("%H:%M")
-    print(
-        f"{OVERLAY0}horus log — live since {started}"
-        f" · f full history · q quit{RESET}"
-    )
+    session_events = []  # everything since launch, for redrawing the live view
+    full_mode = False
+
+    def draw():
+        if full_mode:
+            redraw(r, "full transcript · f back to session", full_history_events())
+        else:
+            redraw(r, f"live since {started} · f full transcript", session_events)
 
     follower = subprocess.Popen(
         ["journalctl", "--user", "-u", UNIT, "-f", "-o", "json", "--since", "now", "-n", "0"],
@@ -134,6 +136,7 @@ def main():
         tty.setcbreak(sys.stdin.fileno())
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
+        draw()
         fds = [follower.stdout] + ([sys.stdin] if interactive else [])
         while True:
             ready, _, _ = select.select(fds, [], [])
@@ -142,7 +145,8 @@ def main():
                 if key in ("q", "\x03", "\x04"):
                     break
                 if key == "f":
-                    print_full_history(r)
+                    full_mode = not full_mode
+                    draw()
             if follower.stdout in ready:
                 line = follower.stdout.readline()
                 if not line:
@@ -153,7 +157,8 @@ def main():
                 except json.JSONDecodeError:
                     continue
                 if ev:
-                    r.event(*ev)
+                    session_events.append(ev)
+                    r.event(*ev)  # new events append to whichever view is shown
     except KeyboardInterrupt:
         pass
     finally:

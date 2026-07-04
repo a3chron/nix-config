@@ -60,9 +60,10 @@ fi
 prompt="[Voice message from Kurt, speech-to-text may have misheard words — interpret \
 phonetically similar words from context (check memory/INDEX.md for topics). Keep answers \
 SHORT and conversational (1-3 sentences), no lists or markdown — they are read aloud by TTS. \
-If the request needs tools or takes more than a few seconds: FIRST write one very short \
-sentence confirming what you are about to do (it is spoken immediately), then do the work, \
-then give a brief spoken-style result.] $text"
+MANDATORY: if you are going to use ANY tool (API call, file access, search, anything that \
+takes time), the VERY FIRST thing in your reply — before the first tool call — must be one \
+short sentence saying what you are doing, like 'On it, checking Linear.' It is spoken to \
+Kurt immediately while you work. Only skip this for instant, tool-free answers.] $text"
 
 # absolute machinectl path: the NOPASSWD sudoers rule matches exactly this.
 # JSON events stream line-by-line; speak each text part as it arrives.

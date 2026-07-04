@@ -47,8 +47,13 @@ let
 					fi
 				done
 				;;
+			log)
+				# live voice-pipeline view: what whisper heard, what horus replied
+				exec journalctl --user -u horus-voice -f -n 30 -o cat \
+					| grep --line-buffered -E 'heard:|reply part:|no speech|no reply|recording'
+				;;
 			*)
-				echo "usage: horus [chat|pause|resume|status]" >&2
+				echo "usage: horus [chat|pause|resume|status|log]" >&2
 				exit 1
 				;;
 			esac

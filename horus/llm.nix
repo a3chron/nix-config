@@ -26,7 +26,7 @@ let
 					--n-gpu-layers 999
 					--n-cpu-moe 30
 				'';
-				ttl = 600; # unload after 10 min idle
+				ttl = 1800; # unload after 30 min idle (Kurt's usual browsing/music/YouTube coexists fine; heavy GPU work = `horus pause`)
 			};
 		};
 	};

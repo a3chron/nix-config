@@ -19,8 +19,8 @@ MAC = os.environ.get("HORUS_HEADPHONE_MAC", "3C:B0:ED:A7:8B:42")
 CARD = "bluez_card." + MAC.replace(":", "_")
 WAV = "/tmp/horus-voice.wav"
 SOUNDS = "/run/current-system/sw/share/sounds/freedesktop/stereo"
-CHIME_START = f"{SOUNDS}/audio-volume-change.oga"
-CHIME_STOP = f"{SOUNDS}/complete.oga"
+CHIME_START = f"{SOUNDS}/message-new-instant.oga"  # clear pop = "talk now"
+CHIME_STOP = f"{SOUNDS}/complete.oga"              # two-tone = "got it, thinking"
 
 RATE = 16000
 CHUNK_BYTES = RATE * 2 // 10        # 0.1s of s16 mono
@@ -124,6 +124,7 @@ def record_until_silence():
     baseline = None
     baseline_samples = []
     heard_speech = False
+    speech_time = 0.0  # cumulative; a short hum must not arm the auto-stop
     quiet_for = 0.0
     started = time.time()
     try:
@@ -143,7 +144,8 @@ def record_until_silence():
 
             speech_thresh = max(500, baseline * 3)
             if level >= speech_thresh:
-                heard_speech = True
+                speech_time += 0.1
+                heard_speech = speech_time >= 0.7
                 quiet_for = 0.0
             else:
                 quiet_for += 0.1

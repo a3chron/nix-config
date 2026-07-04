@@ -85,7 +85,10 @@ in
 		path = [ pkgs.pipewire pkgs.pulseaudio voiceRespond "/run/wrappers" ];
 		environment.HORUS_HEADPHONE_MAC = headphoneMac;
 		serviceConfig = {
-			ExecStart = "${pythonEnv}/bin/python ${./horus-ptt.py}";
+			# deliberately impure: run the script straight from the config repo so
+			# tuning (chimes, thresholds) only needs a user-service restart, no rebuild.
+			# Pin back to ${./horus-ptt.py} once the voice UX has settled.
+			ExecStart = "${pythonEnv}/bin/python /home/a3chron/nixos-config/horus/horus-ptt.py";
 			Restart = "on-failure";
 			RestartSec = 5;
 		};

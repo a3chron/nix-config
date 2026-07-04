@@ -154,7 +154,7 @@ def record_until_silence():
                 break
             if elapsed >= MAX_RECORD_S:
                 break
-            if not heard_speech and elapsed >= 8.0:
+            if not heard_speech and elapsed >= 15.0:
                 break  # user pressed but never spoke
     finally:
         rec.terminate()

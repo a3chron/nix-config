@@ -32,10 +32,15 @@ if [ -z "${text// /}" ]; then
 	exit 0
 fi
 
+# frame the query: STT mishears words, and the answer gets read aloud by TTS
+prompt="[Voice message from Kurt, speech-to-text may have misheard words — interpret \
+phonetically similar words from context (check memory/INDEX.md for topics). Answer in \
+1-3 short conversational sentences, no lists or markdown — it will be read aloud.] $text"
+
 # absolute machinectl path: the NOPASSWD sudoers rule matches exactly this
 # JSON events -> just the assistant text parts, ANSI-free by construction
 reply=$(/run/wrappers/bin/sudo -n /run/current-system/sw/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
-	"cd /home/horus/work && opencode run --format json $(printf '%q' "$text") 2>/dev/null" \
+	"cd /home/horus/work && opencode run --format json $(printf '%q' "$prompt") 2>/dev/null" \
 	| grep '^{' | jq -rs 'map(select(.type=="text") | .part.text) | join(" ")' 2>/dev/null || true)
 echo "reply: $reply"
 if [ -z "${reply// /}" ]; then

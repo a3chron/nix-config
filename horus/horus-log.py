@@ -2,9 +2,10 @@
 # pipeline journal. Shows only events since launch; `f` toggles between that
 # and the full retained transcript, `q` quits. Catppuccin Mocha, names colored.
 #
-# Rounds render as: recording (9.5s) -> transcribing (0.7s) -> Kurt block ->
-# thinking (25.9s) -> Horus block -> synth (3.2s). Stage lines appear live
-# ("thinking…") and are rewritten in place once their duration is known.
+# Rounds render turn-grouped, every block separated by one blank line:
+# Kurt header -> recording (9.5s) -> transcribing (0.7s) -> transcript ->
+# Horus header -> thinking (25.9s) -> reply/tools/synth. Stage lines appear
+# live ("thinking…") and are rewritten in place once their duration is known.
 import datetime
 import json
 import os
@@ -71,22 +72,33 @@ class Renderer:
 
     def __init__(self, live=True):
         self.live = live
-        self.last_role = None   # consecutive horus parts merge into one block
+        self.turn = None        # whose header is open: None | "Kurt" | "Horus"
         self.stage_open = None  # (label, start_ts)
         self.stage_printed = False
 
     def width(self):
         return min(shutil.get_terminal_size().columns, 100)
 
+    def sep(self):
+        # every block prints exactly one blank line before itself, never after
+        print()
+
+    def ensure_turn(self, name, ts):
+        if self.turn != name:
+            self.header(name, ts)
+            self.turn = name
+
     def sysline(self, text):
-        print(f"\n  {OVERLAY0}· {text}{RESET}")
+        self.sep()
+        print(f"  {OVERLAY0}· {text}{RESET}")
 
     def stage(self, label, ts):
         self.finish_stage(ts)
         self.stage_open = (label, ts)
         self.stage_printed = False
         if self.live:
-            print(f"\n  {OVERLAY0}· {label}…{RESET}")
+            self.sep()
+            print(f"  {OVERLAY0}· {label}…{RESET}")
             self.stage_printed = True
 
     def finish_stage(self, ts):
@@ -98,7 +110,8 @@ class Renderer:
         if self.stage_printed:
             print(f"\x1b[1A\x1b[2K{line}")  # rewrite the live "label…" line
         else:
-            print(f"\n{line}")
+            self.sep()
+            print(line)
         self.stage_open = None
         self.stage_printed = False
 
@@ -106,38 +119,42 @@ class Renderer:
         hhmm = datetime.datetime.fromtimestamp(ts).strftime("%H:%M")
         plain = f"── {hhmm} ─ {name} "
         pad = "─" * max(0, self.width() - len(plain))
+        self.sep()
         print(
-            f"\n{SURFACE2}── {RESET}{OVERLAY0}{hhmm}{RESET}{SURFACE2} ─ {RESET}"
-            f"{BOLD}{NAME_COLOR[name]}{name}{RESET} {SURFACE2}{pad}{RESET}\n"
+            f"{SURFACE2}── {RESET}{OVERLAY0}{hhmm}{RESET}{SURFACE2} ─ {RESET}"
+            f"{BOLD}{NAME_COLOR[name]}{name}{RESET} {SURFACE2}{pad}{RESET}"
         )
 
     def body(self, text):
+        self.sep()
         for line in textwrap.wrap(text, self.width() - 4) or [""]:
             print(f"  {line}")
 
     def event(self, kind, text, ts):
         if kind == "rec_start":
+            self.ensure_turn("Kurt", ts)  # the Kurt header opens the round
             self.stage("recording", ts)
         elif kind == "rec_done":
             self.finish_stage(ts)
             self.stage("transcribing", ts)
         elif kind == "kurt":
             self.finish_stage(ts)
-            self.header("Kurt", ts)
+            self.ensure_turn("Kurt", ts)  # no-op unless launched mid-round
             self.body(text)
-            self.last_role = "kurt"
+            self.ensure_turn("Horus", ts)  # agent's turn starts with thinking
             self.stage("thinking", ts)
         elif kind == "horus":
             # always close the open stage (thinking / a tool) so its duration
             # lands chronologically, even between merged reply parts
             self.finish_stage(ts)
-            if self.last_role != "horus":
-                self.header("Horus", ts)
+            self.ensure_turn("Horus", ts)
             self.body(text)
-            self.last_role = "horus"
         elif kind == "tool":
+            self.ensure_turn("Horus", ts)
             self.stage(text, ts)
         elif kind == "synth":
+            self.ensure_turn("Horus", ts)
+            self.sep()
             print(f"  {OVERLAY0}· synth ({text}s){RESET}")
             self.stage_printed = False  # a rewrite would now hit this line
         elif kind == "sys":
@@ -169,12 +186,13 @@ def redraw(title, events):
         r.event(*ev)
     if r.stage_open:  # e.g. still thinking right now
         label, _ = r.stage_open
-        print(f"\n  {OVERLAY0}· {label}…{RESET}")
+        r.sep()
+        print(f"  {OVERLAY0}· {label}…{RESET}")
         r.stage_printed = True  # the live renderer may rewrite it with a duration
     if not events:
         print(f"\n  {OVERLAY0}· nothing yet{RESET}")
     live = Renderer(live=True)
-    live.last_role = r.last_role
+    live.turn = r.turn
     live.stage_open, live.stage_printed = r.stage_open, r.stage_printed
     return live
 

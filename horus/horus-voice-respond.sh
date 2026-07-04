@@ -20,7 +20,8 @@ trap 'rm -rf "$tmpdir"' EXIT
 # reply would go there silently
 play() {
 	local sink
-	sink=$(pactl list sinks short 2>/dev/null | awk '/bluez_output/ {print $2; exit}')
+	# grep/cut, not awk: awk is not on the voice unit's PATH
+	sink=$(pactl list sinks short 2>/dev/null | grep -m1 bluez_output | cut -f2)
 	if [ -n "$sink" ]; then
 		pw-play --target "$sink" "$1"
 	else
@@ -79,18 +80,41 @@ no lists, no markdown, no issue-ID dumps.]"
 
 # absolute machinectl path: the NOPASSWD sudoers rule matches exactly this.
 # JSON events stream line-by-line; speak each text part as it arrives.
+# Tool/error events become markers so a run that dies mid-tools (e.g. an
+# oversized fetch blowing the context) is detected instead of ending silent:
+# "answered" = some text arrived AFTER the last tool call.
 /run/wrappers/bin/sudo -n /run/current-system/sw/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
 	"cd /home/horus/work && timeout 240 opencode run --format json $(printf '%q' "$prompt") 2>/dev/null" \
 	| stdbuf -oL tr -d '\r' | grep --line-buffered '^{' \
-	| jq --unbuffered -rc 'select(.type=="text") | .part.text | gsub("\n"; " ")' 2>/dev/null \
-	| while IFS= read -r part; do
-		[ -z "${part// /}" ] && continue
-		echo "reply part: $part"
-		touch "$tmpdir/spoke"
-		speak "$part"
+	| jq --unbuffered -rc '
+		if .type=="text" then "T " + (.part.text | gsub("\n"; " "))
+		elif .type=="tool_use" then "U " + (.part.tool // "?")
+		elif .type=="error" then "E " + (tostring | .[0:200])
+		else empty end' 2>/dev/null \
+	| while IFS= read -r line; do
+		kind="${line:0:1}"
+		payload="${line:2}"
+		case "$kind" in
+		T)
+			[ -z "${payload// /}" ] && continue
+			echo "reply part: $payload"
+			touch "$tmpdir/spoke" "$tmpdir/answered"
+			speak "$payload"
+			;;
+		U)
+			echo "tool: $payload"
+			rm -f "$tmpdir/answered"
+			;;
+		E)
+			echo "agent error: $payload"
+			;;
+		esac
 	done
 
 if [ ! -f "$tmpdir/spoke" ]; then
 	echo "no reply text received"
 	speak "Sorry, something went wrong — I didn't get an answer back."
+elif [ ! -f "$tmpdir/answered" ]; then
+	echo "round died mid-tools, no final answer"
+	speak "Sorry — something broke while I was working on that, and I didn't get a result back."
 fi

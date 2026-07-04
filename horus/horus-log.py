@@ -47,6 +47,8 @@ def parse(entry):
         return ("rec_start", "", ts)
     if msg.startswith("responding..."):
         return ("rec_done", "", ts)
+    if msg.startswith("tool: "):
+        return ("tool", msg[len("tool: "):].strip(), ts)
     m = re.match(r"synth: (\d+)ms", msg)
     if m:
         return ("synth", f"{int(m.group(1)) / 1000:.1f}", ts)
@@ -55,6 +57,8 @@ def parse(entry):
         ("no reply text received", "no reply — spoke fallback"),
         ("no bluetooth mic source found", "no bluetooth mic found"),
         ("kokoro failed", "kokoro failed — piper fallback"),
+        ("agent error", "agent error"),
+        ("round died mid-tools", "run died mid-tools — no result"),
     ]:
         if msg.startswith(prefix):
             return ("sys", label, ts)
@@ -78,7 +82,7 @@ class Renderer:
         print(f"\n  {OVERLAY0}· {text}{RESET}")
 
     def stage(self, label, ts):
-        self.finish_stage(None)
+        self.finish_stage(ts)
         self.stage_open = (label, ts)
         self.stage_printed = False
         if self.live:
@@ -124,13 +128,18 @@ class Renderer:
             self.last_role = "kurt"
             self.stage("thinking", ts)
         elif kind == "horus":
+            # always close the open stage (thinking / a tool) so its duration
+            # lands chronologically, even between merged reply parts
+            self.finish_stage(ts)
             if self.last_role != "horus":
-                self.finish_stage(ts)
                 self.header("Horus", ts)
             self.body(text)
             self.last_role = "horus"
+        elif kind == "tool":
+            self.stage(text, ts)
         elif kind == "synth":
             print(f"  {OVERLAY0}· synth ({text}s){RESET}")
+            self.stage_printed = False  # a rewrite would now hit this line
         elif kind == "sys":
             self.finish_stage(ts)
             self.sysline(text)

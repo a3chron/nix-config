@@ -8,5 +8,6 @@
 		./searxng.nix
 		./cli.nix
 		./voice.nix
+		./briefing.nix
 	];
 }

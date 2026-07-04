@@ -25,7 +25,7 @@ CHIME_STOP = f"{SOUNDS}/complete.oga"
 RATE = 16000
 CHUNK_BYTES = RATE * 2 // 10        # 0.1s of s16 mono
 BASELINE_CHUNKS = 5                 # first 0.5s calibrates ambient noise
-SILENCE_HOLD_S = 1.2                # this much trailing quiet ends the recording
+SILENCE_HOLD_S = 2.0                # this much trailing quiet ends the recording (Kurt pauses while thinking)
 MAX_RECORD_S = 45
 MIN_RECORD_S = 1.0
 
@@ -90,10 +90,15 @@ def rms(chunk):
 
 def record_until_silence():
     """Returns path to wav, or None if nothing usable was captured."""
+    # start the blip immediately (perceived latency!), query the profile while it plays,
+    # and only wait for it to finish right before we tear down A2DP
+    blip = subprocess.Popen(["pw-play", CHIME_START])
     prev = active_profile()
     was_hfp = prev is not None and prev.startswith("headset-head-unit")
-
-    chime(CHIME_START, wait=True)  # finish the blip BEFORE we tear down A2DP
+    try:
+        blip.wait(timeout=4)
+    except subprocess.TimeoutExpired:
+        blip.kill()
     if not was_hfp:
         run(["pactl", "set-card-profile", CARD, "headset-head-unit"])
 
@@ -156,10 +161,11 @@ def record_until_silence():
         except subprocess.TimeoutExpired:
             rec.kill()
             rec.wait()
+        # ta-da over the still-active HFP sink: immediate feedback, no LDAC wait
+        chime(CHIME_STOP, wait=True)
         if not was_hfp and prev:
             run(["pactl", "set-card-profile", CARD, prev])
             wait_bt_sink()
-        chime(CHIME_STOP, wait=True)
 
     if not heard_speech:
         print("no speech detected", flush=True)

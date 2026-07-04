@@ -15,6 +15,17 @@ wav="$1"
 tmpdir=$(mktemp -d /tmp/horus-voice.XXXXXX)
 trap 'rm -rf "$tmpdir"' EXIT
 
+# voice rounds share one opencode session while they come <10 min apart, so
+# follow-up questions keep the previous exchange in context (and the prompt
+# cache warm). The session id is captured from the event stream below.
+sess_file=/tmp/horus-voice-session
+sess_args=""
+if [ -f "$sess_file" ] && [ -n "$(find "$sess_file" -mmin -10 2>/dev/null)" ]; then
+	sess_args="--session $(cat "$sess_file")"
+else
+	rm -f "$sess_file"
+fi
+
 # play to the headphones explicitly: right after the HFP->A2DP flip the
 # *default* sink can briefly point elsewhere (e.g. easyeffects) and the
 # reply would go there silently
@@ -84,12 +95,13 @@ no lists, no markdown, no issue-ID dumps.]"
 # oversized fetch blowing the context) is detected instead of ending silent:
 # "answered" = some text arrived AFTER the last tool call.
 /run/wrappers/bin/sudo -n /run/current-system/sw/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
-	"cd /home/horus/work && timeout 240 opencode run --format json $(printf '%q' "$prompt") 2>/dev/null" \
+	"cd /home/horus/work && timeout 240 opencode run --format json $sess_args $(printf '%q' "$prompt") 2>/dev/null" \
 	| stdbuf -oL tr -d '\r' | grep --line-buffered '^{' \
 	| jq --unbuffered -rc '
 		if .type=="text" then "T " + (.part.text | gsub("\n"; " "))
 		elif .type=="tool_use" then "U " + (.part.tool // "?")
 		elif .type=="error" then "E " + (tostring | .[0:200])
+		elif .type=="step_start" then "S " + (.sessionID // empty)
 		else empty end' 2>/dev/null \
 	| while IFS= read -r line; do
 		kind="${line:0:1}"
@@ -108,11 +120,16 @@ no lists, no markdown, no issue-ID dumps.]"
 		E)
 			echo "agent error: $payload"
 			;;
+		S)
+			[ -n "$payload" ] && printf '%s' "$payload" > "$sess_file"
+			;;
 		esac
 	done
 
 if [ ! -f "$tmpdir/spoke" ]; then
 	echo "no reply text received"
+	# a stale/broken session id would keep failing every round — drop it
+	[ -n "$sess_args" ] && rm -f "$sess_file"
 	speak "Sorry, something went wrong — I didn't get an answer back."
 elif [ ! -f "$tmpdir/answered" ]; then
 	echo "round died mid-tools, no final answer"

@@ -22,7 +22,7 @@ let
 					--flash-attn on
 					--cache-type-k q8_0
 					--cache-type-v q8_0
-					--ctx-size 32768
+					--ctx-size 65536
 					--n-gpu-layers 999
 					--n-cpu-moe 30
 				'';

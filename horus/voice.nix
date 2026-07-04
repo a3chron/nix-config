@@ -13,11 +13,23 @@ let
 
 	pythonEnv = pkgs.python3.withPackages (ps: [ ps.evdev ps.dbus-python ps.pygobject3 ]);
 
+	# Kokoro TTS (replaces Piper for replies): ONNX model run with plain
+	# onnxruntime + phonemizer — no pip. Logic in ./horus-kokoro-tts.py (impure
+	# repo path, same pattern as the other voice scripts).
+	ttsEnv = pkgs.python3.withPackages (ps: [ ps.onnxruntime ps.phonemizer ps.numpy ]);
+	horusTts = pkgs.writeShellApplication {
+		name = "horus-tts";
+		text = ''
+			export PHONEMIZER_ESPEAK_LIBRARY=${pkgs.espeak-ng}/lib/libespeak-ng.so
+			exec ${ttsEnv}/bin/python /home/a3chron/nixos-config/horus/horus-kokoro-tts.py "$@"
+		'';
+	};
+
 	# STT -> agent -> TTS. Thin wrapper: PATH from nix, logic in the repo script
 	# (deliberately impure, like the ptt daemon — tunable via service restart).
 	voiceRespond = pkgs.writeShellApplication {
 		name = "horus-voice-respond";
-		runtimeInputs = [ whisper-cpp unstable.piper-tts pkgs.pipewire pkgs.pulseaudio pkgs.jq ];
+		runtimeInputs = [ whisper-cpp unstable.piper-tts horusTts pkgs.pipewire pkgs.pulseaudio pkgs.jq ];
 		text = ''
 			exec ${pkgs.runtimeShell} /home/a3chron/nixos-config/horus/horus-voice-respond.sh "$@"
 		'';
@@ -40,7 +52,8 @@ in
 
 	environment.systemPackages = [
 		whisper-cpp
-		unstable.piper-tts
+		unstable.piper-tts # kept as fallback while Kokoro proves itself
+		horusTts
 		voiceRespond
 		pkgs.sound-theme-freedesktop
 	];

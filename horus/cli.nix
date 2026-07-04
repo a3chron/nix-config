@@ -5,7 +5,7 @@
 let
 	horus = pkgs.writeShellApplication {
 		name = "horus";
-		runtimeInputs = [ pkgs.curl pkgs.jq ];
+		runtimeInputs = [ pkgs.curl pkgs.jq pkgs.python3 ];
 		text = ''
 			cmd="''${1:-chat}"
 
@@ -48,9 +48,9 @@ let
 				done
 				;;
 			log)
-				# live voice-pipeline view: what whisper heard, what horus replied
-				exec journalctl --user -u horus-voice -f -n 30 -o cat \
-					| grep --line-buffered -E 'heard:|reply part:|no speech|no reply|recording'
+				# live voice-pipeline view: what whisper heard, what horus replied.
+				# runs from the repo path (impure by design) so tweaks need no rebuild
+				exec python3 /home/a3chron/nixos-config/horus/horus-log.py
 				;;
 			*)
 				echo "usage: horus [chat|pause|resume|status|log]" >&2

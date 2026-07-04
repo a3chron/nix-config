@@ -42,7 +42,11 @@ speak() {
 		-e 's~https?://[^ )]+~ link ~g' \
 		-e 's/([0-9]+) *- *([0-9]+)/\1 to \2/g')
 	[ -z "${spoken// /}" ] && return 0
-	echo "$spoken" | piper --model "$piper_voice" --output_file "$tmpdir/part.wav" 2>/dev/null
+	# Kokoro (am_michael); Piper stays as audible fallback if it ever fails
+	if ! horus-tts --out "$tmpdir/part.wav" "$spoken" 2>/dev/null; then
+		echo "kokoro failed, falling back to piper"
+		echo "$spoken" | piper --model "$piper_voice" --output_file "$tmpdir/part.wav" 2>/dev/null
+	fi
 	play "$tmpdir/part.wav"
 }
 

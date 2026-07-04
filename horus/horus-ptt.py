@@ -25,7 +25,7 @@ CHIME_STOP = f"{SOUNDS}/complete.oga"              # two-tone = "got it, thinkin
 RATE = 16000
 CHUNK_BYTES = RATE * 2 // 10        # 0.1s of s16 mono
 BASELINE_CHUNKS = 5                 # first 0.5s calibrates ambient noise
-SILENCE_HOLD_S = 2.0                # this much trailing quiet ends the recording (Kurt pauses while thinking)
+SILENCE_HOLD_S = 1.7                # this much trailing quiet ends the recording (Kurt pauses while thinking)
 MAX_RECORD_S = 45
 MIN_RECORD_S = 1.0
 

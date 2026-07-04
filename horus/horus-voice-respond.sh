@@ -57,7 +57,8 @@ spoken=$(echo "$reply" | sed -E \
 	-e 's/^#+ +//' \
 	-e 's/^ *[-*+] +//' \
 	-e 's/\[([^]]+)\]\([^)]*\)/\1/g' \
-	-e 's~https?://[^ )]+~ link ~g')
+	-e 's~https?://[^ )]+~ link ~g' \
+	-e 's/([0-9]+) *- *([0-9]+)/\1 to \2/g')
 
 echo "$spoken" | piper --model "$piper_voice" --output_file /tmp/horus-reply.wav
 play /tmp/horus-reply.wav

@@ -203,6 +203,7 @@ def main():
     try:
         for ev in dev.read_loop():
             if ev.type == ecodes.EV_KEY and ev.code == PTT_KEY:
+                print(f"ptt key event value={ev.value}", flush=True)
                 if ev.value == 1:
                     wav = record_until_silence()
                     if wav:

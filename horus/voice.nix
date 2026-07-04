@@ -50,6 +50,17 @@ in
 	# PTT daemon runs as a user service and needs raw evdev access
 	users.users.a3chron.extraGroups = [ "input" ];
 
+	# never suspend the headphone sink: a suspended BT link takes 1-2s to wake
+	# and swallows the start chime / first spoken word of a reply
+	services.pipewire.wireplumber.extraConfig."51-horus-bluez-no-suspend" = {
+		"monitor.bluez.rules" = [
+			{
+				matches = [ { "node.name" = "~bluez_output.*"; } ];
+				actions.update-props."session.suspend-timeout-seconds" = 0;
+			}
+		];
+	};
+
 	environment.systemPackages = [
 		whisper-cpp
 		unstable.piper-tts

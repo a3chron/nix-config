@@ -48,5 +48,16 @@ if [ -z "${reply// /}" ]; then
 	exit 0
 fi
 
-echo "$reply" | piper --model "$piper_voice" --output_file /tmp/horus-reply.wav
+# strip markdown so the TTS doesn't say "asterisk asterisk"
+spoken=$(echo "$reply" | sed -E \
+	-e 's/\*\*([^*]+)\*\*/\1/g' \
+	-e 's/\*([^*]+)\*/\1/g' \
+	-e 's/__([^_]+)__/\1/g' \
+	-e 's/`+([^`]+)`+/\1/g' \
+	-e 's/^#+ +//' \
+	-e 's/^ *[-*+] +//' \
+	-e 's/\[([^]]+)\]\([^)]*\)/\1/g' \
+	-e 's~https?://[^ )]+~ link ~g')
+
+echo "$spoken" | piper --model "$piper_voice" --output_file /tmp/horus-reply.wav
 play /tmp/horus-reply.wav

@@ -9,40 +9,17 @@ let
 	whisper-cpp = unstable.whisper-cpp.override { vulkanSupport = true; };
 
 	headphoneMac = "3C:B0:ED:A7:8B:42";
-	whisperModel = "/var/lib/llm/models/ggml-large-v3-turbo.bin";
-	piperVoice = "/var/lib/llm/models/piper-en_US-lessac-medium.onnx";
+	# whisper/piper model paths live in horus-voice-respond.sh
 
 	pythonEnv = pkgs.python3.withPackages (ps: [ ps.evdev ps.dbus-python ps.pygobject3 ]);
 
-	# STT -> agent -> TTS, one shot per utterance
+	# STT -> agent -> TTS. Thin wrapper: PATH from nix, logic in the repo script
+	# (deliberately impure, like the ptt daemon — tunable via service restart).
 	voiceRespond = pkgs.writeShellApplication {
 		name = "horus-voice-respond";
-		runtimeInputs = [ whisper-cpp unstable.piper-tts pkgs.pipewire pkgs.jq ];
+		runtimeInputs = [ whisper-cpp unstable.piper-tts pkgs.pipewire pkgs.pulseaudio pkgs.jq ];
 		text = ''
-			sounds=/run/current-system/sw/share/sounds/freedesktop/stereo
-			wav="$1"
-			# strip whisper noise markers like [BLANK_AUDIO], (bell), *music*
-			text=$(whisper-cli -m ${whisperModel} -f "$wav" --language en --no-timestamps 2>/dev/null \
-				| sed -E 's/\[[^]]*\]//g; s/\([^)]*\)//g; s/^ *//' | tr '\n' ' ')
-			text=$(echo "$text" | sed -E 's/^ +| +$//g')
-			echo "heard: $text"
-			if [ -z "''${text// /}" ]; then
-				pw-play "$sounds/dialog-warning.oga" & # didn't catch anything
-				exit 0
-			fi
-			# absolute machinectl path: the NOPASSWD sudoers rule matches exactly this;
-			# the unit's PATH would resolve to the raw nix-store path and get a password prompt
-			# JSON events -> just the assistant text parts, ANSI-free by construction
-			reply=$(/run/wrappers/bin/sudo -n /run/current-system/sw/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
-				"cd /home/horus/work && opencode run --format json $(printf '%q' "$text") 2>/dev/null" \
-				| grep '^{' | jq -rs 'map(select(.type=="text") | .part.text) | join(" ")' 2>/dev/null || true)
-			echo "reply: $reply"
-			if [ -z "''${reply// /}" ]; then
-				pw-play "$sounds/dialog-error.oga" &
-				exit 0
-			fi
-			echo "$reply" | piper --model ${piperVoice} --output_file /tmp/horus-reply.wav
-			pw-play /tmp/horus-reply.wav
+			exec bash /home/a3chron/nixos-config/horus/horus-voice-respond.sh "$@"
 		'';
 	};
 in

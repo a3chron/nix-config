@@ -39,6 +39,15 @@
   # Enable networking
   networking.networkmanager.enable = true;
 
+  # Per-device connectivity checks: the PC is dual-homed (ethernet = own LAN
+  # with the Nanoleafs, WiFi = strechu2). When the LAN loses internet
+  # (weekends/nights), NM penalizes its default route (+20000) so IPv4
+  # internet fails over to strechu2 automatically — and back on recovery.
+  networking.networkmanager.settings.connectivity = {
+    uri = "http://nmcheck.gnome.org/check_network_status.txt";
+    interval = 60;
+  };
+
 	# Garbage collection
 	nix.gc = {
 		automatic = true;

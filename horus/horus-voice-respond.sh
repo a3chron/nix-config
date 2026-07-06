@@ -15,12 +15,12 @@ wav="$1"
 tmpdir=$(mktemp -d /tmp/horus-voice.XXXXXX)
 trap 'rm -rf "$tmpdir"' EXIT
 
-# voice rounds share one opencode session while they come <10 min apart, so
+# voice rounds share one opencode session while they come <30 min apart, so
 # follow-up questions keep the previous exchange in context (and the prompt
 # cache warm). The session id is captured from the event stream below.
 sess_file=/tmp/horus-voice-session
 sess_args=""
-if [ -f "$sess_file" ] && [ -n "$(find "$sess_file" -mmin -10 2>/dev/null)" ]; then
+if [ -f "$sess_file" ] && [ -n "$(find "$sess_file" -mmin -30 2>/dev/null)" ]; then
 	sess_args="--session $(cat "$sess_file")"
 else
 	rm -f "$sess_file"

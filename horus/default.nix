@@ -9,5 +9,6 @@
 		./cli.nix
 		./voice.nix
 		./briefing.nix
+		./backup.nix
 	];
 }

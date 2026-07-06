@@ -8,7 +8,9 @@ let
 in
 {
 	containers.horus = {
-		autoStart = false; # started on demand via `horus resume`
+		# up from boot so the WhatsApp bridge receives AND auto-answers unattended
+		# (the model itself still only loads on demand); `horus pause` stops it
+		autoStart = true;
 
 		bindMounts = {
 			"/home/horus/work" = {
@@ -44,8 +46,12 @@ in
 				pkgs.nodejs_24 # for MCP servers (searxng, Linear, WhatsApp bridge)
 			];
 
-			# shared network namespace: use the host's resolv.conf for DNS
-			networking.useHostResolvConf = lib.mkForce true;
+			# static DNS instead of copying the host's resolv.conf: the copy happens
+			# once at container start, and at boot that's BEFORE WiFi/DHCP has
+			# written any nameservers — leaving the container without DNS until the
+			# next restart (bit us 2026-07-06: bridge stuck on ENOTFOUND for hours)
+			networking.useHostResolvConf = lib.mkForce false;
+			networking.nameservers = [ "1.1.1.1" "9.9.9.9" ];
 
 			# agent always works from ~/work (bind-mounted ~/horus on the host),
 			# where opencode.json + AGENTS.md live
@@ -53,8 +59,9 @@ in
 				if [ "$USER" = "horus" ]; then cd /home/horus/work; fi
 			'';
 
-			# WhatsApp bridge (Baileys) — queues messages even while the agent
-			# is not in use; pairs via QR printed to the journal / bridge.log
+			# WhatsApp bridge (Baileys) — receives messages and auto-answers
+			# allowlisted senders via `opencode run`; pairs via QR printed to
+			# the journal / bridge.log
 			systemd.services.wa-bridge = {
 				description = "Horus WhatsApp bridge";
 				wantedBy = [ "multi-user.target" ];
@@ -62,6 +69,15 @@ in
 				serviceConfig = {
 					User = "horus";
 					WorkingDirectory = "/home/horus/work/bridge";
+					# append: has no rotation — trim on each start (container restarts
+					# on every pause/resume, so this actually fires). Runs as root ("+")
+					# because systemd created the file root-owned.
+					ExecStartPre = "+" + pkgs.writeShellScript "wa-bridge-logrotate" ''
+						f=/home/horus/work/bridge/bridge.log
+						if [ -f "$f" ] && [ "$(stat -c%s "$f")" -gt 1048576 ]; then
+							tail -n 1000 "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+						fi
+					'';
 					ExecStart = "${pkgs.nodejs_24}/bin/node /home/horus/work/bridge/server.js";
 					Restart = "always";
 					RestartSec = 5;
@@ -71,5 +87,13 @@ in
 				};
 			};
 		};
+	};
+
+	# belt & suspenders for the same boot race: don't start the container until
+	# the network is actually up (with static DNS the bridge would recover by
+	# retrying anyway; this just skips the pointless early failures)
+	systemd.services."container@horus" = {
+		wants = [ "network-online.target" ];
+		after = [ "network-online.target" ];
 	};
 }

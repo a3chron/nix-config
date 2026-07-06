@@ -1,4 +1,5 @@
-# Voice: headphone-button push-to-talk -> whisper.cpp STT -> agent -> Piper TTS.
+# Voice: headphone-button push-to-talk -> whisper.cpp STT -> agent -> Kokoro TTS
+# (Piper as fallback).
 # Only runs while the Nothing Headphone (1) (3C:B0:ED:A7:8B:42) is connected:
 # a BlueZ D-Bus watcher starts/stops horus-voice.service.
 # Python daemons live in ./horus-ptt.py and ./horus-bt-watch.py.

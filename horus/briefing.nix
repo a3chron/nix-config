@@ -11,7 +11,7 @@
 			systemctl start container@horus.service
 			sleep 10
 			${pkgs.systemd}/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
-				'cd /home/horus/work && opencode run "Run the saturday briefing (see skills/saturday-briefing.md) and send it to Kurt via WhatsApp."' \
+				'cd /home/horus/work && timeout 900 opencode run "Run the saturday briefing (see skills/saturday-briefing.md) and send it to Kurt via WhatsApp."' \
 				|| true
 		'';
 	};

@@ -210,7 +210,12 @@ def main():
                     wav = record_until_silence()
                     if wav:
                         print("responding...", flush=True)
-                        subprocess.run(["horus-voice-respond", wav], timeout=600)
+                        try:
+                            subprocess.run(["horus-voice-respond", wav], timeout=600)
+                        except subprocess.TimeoutExpired:
+                            # don't let a hung round crash the daemon (would
+                            # drop the device grab and restart the service)
+                            print("voice respond timed out", file=sys.stderr, flush=True)
                     # drop paddle presses queued while we were busy
                     try:
                         while dev.read_one() is not None:

@@ -6,12 +6,15 @@
 {
 	services.searx = {
 		enable = true;
+		# SEARXNG_SECRET lives outside git (this repo is public on GitHub);
+		# regenerate with: echo "SEARXNG_SECRET=$(openssl rand -hex 32)" > ~/horus/.secrets/searxng.env
+		environmentFile = "/home/a3chron/horus/.secrets/searxng.env";
 		settings = {
 			server = {
 				bind_address = "127.0.0.1";
 				port = 8888;
 				# localhost-only instance; key only guards CSRF-style tokens
-				secret_key = "horus-local-searxng-4f8a2b1c9d3e5f7a";
+				secret_key = "$SEARXNG_SECRET";
 			};
 			search.formats = [ "html" "json" ];
 		};

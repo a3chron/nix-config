@@ -65,7 +65,10 @@ let
 					printf 'loaded:     %s\n' "''${loaded:-none}"
 				fi
 				if wa=$(curl -sf --max-time 2 http://127.0.0.1:8765/status); then
-					printf 'whatsapp:   %s\n' "$(echo "$wa" | jq -r '.status + (if .running then " — answering now" elif (.pending // 0) > 0 then " — \(.pending) queued" else "" end)')"
+					printf 'whatsapp:   %s\n' "$(echo "$wa" | jq -r '.status
+						+ (if .running then " — answering now" elif (.pending // 0) > 0 then " — \(.pending) queued" else "" end)
+						+ (if .status != "connected" and .lastCloseReason then " — last close \(.lastCloseReason)" else "" end)
+						+ (if .status != "connected" and .lastConnectedAt then ", last connected \(.lastConnectedAt)" else "" end)')"
 				else
 					printf 'whatsapp:   %s\n' "unreachable (container down?)"
 				fi

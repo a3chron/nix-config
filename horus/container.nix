@@ -49,9 +49,21 @@ in
 			# static DNS instead of copying the host's resolv.conf: the copy happens
 			# once at container start, and at boot that's BEFORE WiFi/DHCP has
 			# written any nameservers — leaving the container without DNS until the
-			# next restart (bit us 2026-07-06: bridge stuck on ENOTFOUND for hours)
+			# next restart (bit us 2026-07-06: bridge stuck on ENOTFOUND for hours).
+			# networking.nameservers alone is NOT enough: with no DHCP client in
+			# the container, resolvconf has no source and generates an EMPTY
+			# resolv.conf (bit us again same night) — write the file directly.
+			# MUST be the fritz routers: both boxes REJECT external DNS (port 53
+			# to 1.1.1.1 etc. → ECONNREFUSED). .180.1 = own LAN (cable, always
+			# there, resolves even while its internet is parental-blocked),
+			# .178.1 = house net via WiFi as fallback. timeout:2 caps the stall
+			# when the first one is unreachable (cable unplugged).
 			networking.useHostResolvConf = lib.mkForce false;
-			networking.nameservers = [ "1.1.1.1" "9.9.9.9" ];
+			networking.resolvconf.enable = lib.mkForce false;
+			# plain string, not '': tab indentation would survive inside '' and
+			# glibc ignores resolv.conf lines that don't start with the keyword
+			environment.etc."resolv.conf".text =
+				"nameserver 192.168.180.1\nnameserver 192.168.178.1\noptions timeout:2 attempts:2\n";
 
 			# agent always works from ~/work (bind-mounted ~/horus on the host),
 			# where opencode.json + AGENTS.md live

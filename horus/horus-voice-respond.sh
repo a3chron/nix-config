@@ -62,6 +62,16 @@ speak() {
 		echo "$spoken" | piper --model "$piper_voice" --output_file "$tmpdir/part.wav" 2>/dev/null
 	fi
 	echo "synth: $(( $(date +%s%3N) - t0 ))ms"
+	# First spoken part of the round: the A2DP link was just re-created by the
+	# HFP->A2DP profile switch and sat idle through STT+thinking, so BT drops the
+	# first ~300ms on resume — which is exactly Horus's opening word ("On it,").
+	# Prepend 0.5s of silence (matching the wav's own format) so the ramp eats
+	# silence instead. Only the first part per round pays it; later parts play on
+	# the already-warm stream.
+	if [ ! -f "$tmpdir/primed" ]; then
+		touch "$tmpdir/primed"
+		python3 -c 'import sys,wave; p=sys.argv[1]; r=wave.open(p,"rb"); pr=r.getparams(); fr=r.readframes(r.getnframes()); r.close(); lead=b"\x00"*(pr.sampwidth*pr.nchannels*int(pr.framerate*0.5)); w=wave.open(p,"wb"); w.setparams(pr); w.writeframes(lead+fr); w.close()' "$tmpdir/part.wav" 2>/dev/null || true
+	fi
 	play "$tmpdir/part.wav"
 }
 

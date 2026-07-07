@@ -111,6 +111,12 @@ class Renderer:
         return label
 
     def stage(self, label, ts, detail=None):
+        # A stage re-announced identically while it's still open (a duplicated
+        # event, or the same tool/file back-to-back) would otherwise emit a
+        # spurious zero-duration twin — e.g. `transcribing (0.0s)` then
+        # `transcribing (0.9s)`. Keep the original open stage instead.
+        if self.stage_open and self.stage_open[0] == label and self.stage_open[2] == detail:
+            return
         self.finish_stage(ts)
         self.stage_open = (label, ts, detail)
         self.stage_printed = False
@@ -153,6 +159,8 @@ class Renderer:
             self.ensure_turn("Kurt", ts)  # the Kurt header opens the round
             self.stage("recording", ts)
         elif kind == "rec_done":
+            if self.stage_open and self.stage_open[0] == "transcribing":
+                return  # already transcribing — a duplicate "responding..." event
             self.finish_stage(ts)
             self.stage("transcribing", ts)
         elif kind == "kurt":

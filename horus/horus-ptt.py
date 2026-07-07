@@ -90,15 +90,12 @@ def rms(chunk):
 
 def record_until_silence():
     """Returns path to wav, or None if nothing usable was captured."""
-    # start the blip immediately (perceived latency!), query the profile while it plays,
-    # and only wait for it to finish right before we tear down A2DP
-    blip = subprocess.Popen(["pw-play", CHIME_START])
+    # Switch to the mic (HFP) profile and get parec actually capturing BEFORE the
+    # "speak now" chime, so the cue only fires once the mic is truly live. The
+    # profile switch + source wait + settle used to take ~1s AFTER the chime, so
+    # Kurt (who speaks right on the cue) lost his first word or two.
     prev = active_profile()
     was_hfp = prev is not None and prev.startswith("headset-head-unit")
-    try:
-        blip.wait(timeout=4)
-    except subprocess.TimeoutExpired:
-        blip.kill()
     if not was_hfp:
         run(["pactl", "set-card-profile", CARD, "headset-head-unit"])
 
@@ -120,6 +117,20 @@ def record_until_silence():
         ["parec", f"--device={source}", "--format=s16le", f"--rate={RATE}", "--channels=1"],
         stdout=subprocess.PIPE,
     )
+
+    # cue over the now-active HFP sink (like the stop chime), THEN drain whatever
+    # parec buffered during the chime + stream warm-up so it pollutes neither the
+    # recording nor the baseline calibration. Kurt speaks after the cue, into a
+    # mic that is already live and flushed.
+    chime(CHIME_START, wait=True)
+    os.set_blocking(rec.stdout.fileno(), False)
+    try:
+        while rec.stdout.read(CHUNK_BYTES):
+            pass
+    except (BlockingIOError, TypeError):
+        pass
+    os.set_blocking(rec.stdout.fileno(), True)
+
     audio = bytearray()
     baseline = None
     baseline_samples = []

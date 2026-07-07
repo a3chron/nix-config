@@ -30,7 +30,7 @@ let
 	# (deliberately impure, like the ptt daemon — tunable via service restart).
 	voiceRespond = pkgs.writeShellApplication {
 		name = "horus-voice-respond";
-		runtimeInputs = [ whisper-cpp unstable.piper-tts horusTts pkgs.pipewire pkgs.pulseaudio pkgs.jq ];
+		runtimeInputs = [ whisper-cpp unstable.piper-tts horusTts pkgs.pipewire pkgs.pulseaudio pkgs.jq pkgs.python3 ];
 		text = ''
 			exec ${pkgs.runtimeShell} /home/a3chron/nixos-config/horus/horus-voice-respond.sh "$@"
 		'';

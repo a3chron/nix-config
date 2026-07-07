@@ -31,6 +31,17 @@ RESET = "\x1b[0m"
 NAME_COLOR = {"Kurt": SAPPHIRE, "Horus": PEACH}
 
 
+def short_path(p):
+    """container-absolute tool path -> compact form for the muted detail."""
+    if p.startswith("/home/horus/work/"):
+        return p[len("/home/horus/work/"):]
+    if p.startswith("/home/horus/vault/"):
+        return "vault/" + p[len("/home/horus/vault/"):]
+    if p.startswith("/home/horus/"):
+        return "~/" + p[len("/home/horus/"):]
+    return p
+
+
 def parse(entry):
     """journal json entry -> (kind, text, ts) or None"""
     msg = entry.get("MESSAGE", "")
@@ -92,21 +103,28 @@ class Renderer:
         self.sep()
         print(f"  {OVERLAY0}· {text}{RESET}")
 
-    def stage(self, label, ts):
+    def core(self, label, detail):
+        # tool file paths ride along in SURFACE2 (dimmer than the OVERLAY0
+        # stage line) so the tool name still leads and the file reads as muted
+        if detail:
+            return f"{label} {SURFACE2}{detail}{OVERLAY0}"
+        return label
+
+    def stage(self, label, ts, detail=None):
         self.finish_stage(ts)
-        self.stage_open = (label, ts)
+        self.stage_open = (label, ts, detail)
         self.stage_printed = False
         if self.live:
             self.sep()
-            print(f"  {OVERLAY0}· {label}…{RESET}")
+            print(f"  {OVERLAY0}· {self.core(label, detail)}…{RESET}")
             self.stage_printed = True
 
     def finish_stage(self, ts):
         if not self.stage_open:
             return
-        label, t0 = self.stage_open
+        label, t0, detail = self.stage_open
         suffix = f" ({ts - t0:.1f}s)" if ts is not None else "…"
-        line = f"  {OVERLAY0}· {label}{suffix}{RESET}"
+        line = f"  {OVERLAY0}· {self.core(label, detail)}{suffix}{RESET}"
         if self.stage_printed:
             print(f"\x1b[1A\x1b[2K{line}")  # rewrite the live "label…" line
         else:
@@ -151,7 +169,8 @@ class Renderer:
             self.body(text)
         elif kind == "tool":
             self.ensure_turn("Horus", ts)
-            self.stage(text, ts)
+            name, _, path = text.partition("\t")  # "read\t/home/horus/work/…"
+            self.stage(name, ts, short_path(path) if path else None)
         elif kind == "synth":
             self.ensure_turn("Horus", ts)
             self.sep()
@@ -185,9 +204,9 @@ def redraw(title, events):
     for ev in events:
         r.event(*ev)
     if r.stage_open:  # e.g. still thinking right now
-        label, _ = r.stage_open
+        label, _, detail = r.stage_open
         r.sep()
-        print(f"  {OVERLAY0}· {label}…{RESET}")
+        print(f"  {OVERLAY0}· {r.core(label, detail)}…{RESET}")
         r.stage_printed = True  # the live renderer may rewrite it with a duration
     if not events:
         print(f"\n  {OVERLAY0}· nothing yet{RESET}")

@@ -99,7 +99,7 @@ no lists, no markdown, no issue-ID dumps.]"
 	| stdbuf -oL tr -d '\r' | grep --line-buffered '^{' \
 	| jq --unbuffered -rc '
 		if .type=="text" then "T " + (.part.text | gsub("\n"; " "))
-		elif .type=="tool_use" then "U " + (.part.tool // "?")
+		elif .type=="tool_use" then "U " + (.part.tool // "?") + (if (.part.state.input.filePath // "") != "" then "\t" + .part.state.input.filePath else "" end)
 		elif .type=="error" then "E " + (tostring | .[0:200])
 		elif .type=="step_start" then "S " + (.sessionID // empty)
 		else empty end' 2>/dev/null \

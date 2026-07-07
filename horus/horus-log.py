@@ -204,12 +204,16 @@ def main():
 
     follower = subprocess.Popen(
         ["journalctl", "--user", "-u", UNIT, "-f", "-o", "json", "--since", "now", "-n", "0"],
-        stdout=subprocess.PIPE, text=True,
+        stdout=subprocess.PIPE,  # bytes, not text: see the read() below
     )
     # non-blocking + own line buffer: a plain readline() only surfaces one
-    # buffered line per select() wakeup, so the view lagged one message behind
+    # buffered line per select() wakeup, so the view lagged one message behind.
+    # Read bytes and decode per-line only: a non-blocking read() returns
+    # whatever is in the pipe, which can split a multi-byte UTF-8 char (─ · …
+    # are all 3-byte 0xe2 sequences) at the buffer boundary — a text stream
+    # would raise UnicodeDecodeError on the truncated tail.
     os.set_blocking(follower.stdout.fileno(), False)
-    pending = ""
+    pending = b""
 
     def draw():
         if full_mode:
@@ -234,15 +238,15 @@ def main():
                     r = draw()
             if follower.stdout in ready:
                 data = follower.stdout.read()
-                if data == "":
+                if data == b"":
                     print(f"\n  {OVERLAY0}· journal stream ended{RESET}")
                     break
-                pending += data or ""
-                while "\n" in pending:
-                    line, pending = pending.split("\n", 1)
+                pending += data or b""
+                while b"\n" in pending:
+                    line, pending = pending.split(b"\n", 1)
                     try:
-                        ev = parse(json.loads(line))
-                    except json.JSONDecodeError:
+                        ev = parse(json.loads(line))  # json.loads decodes bytes as utf-8
+                    except (json.JSONDecodeError, UnicodeDecodeError):
                         continue
                     if ev:
                         session_events.append(ev)

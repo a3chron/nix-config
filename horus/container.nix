@@ -26,6 +26,10 @@ in
 		config = { pkgs, lib, ... }: {
 			system.stateVersion = "25.11";
 
+			# containers default to UTC; the nanoleaf tool's day/night white uses
+			# Europe/Berlin explicitly anyway, this keeps everything else in sync
+			time.timeZone = "Europe/Berlin";
+
 			# uid 1000 matches a3chron on the host -> bind mount permissions just work
 			users.users.horus = {
 				isNormalUser = true;
@@ -44,6 +48,7 @@ in
 				pkgs.jq
 				pkgs.curl
 				pkgs.nodejs_24 # for MCP servers (searxng, Linear, WhatsApp bridge)
+				pkgs.poppler-utils # pdftotext/pdfinfo/pdftohtml for the pdf tool
 			];
 
 			# static DNS instead of copying the host's resolv.conf: the copy happens

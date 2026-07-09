@@ -85,8 +85,55 @@ let
 				# runs from the repo path (impure by design) so tweaks need no rebuild
 				exec python3 /home/a3chron/nixos-config/horus/horus-log.py
 				;;
+			grant)
+				# live-bind one of my ~/Projects into the running container so horus
+				# can work on it. machinectl bind is transient: it vanishes on the
+				# next container restart, so grants are session-scoped for free.
+				# opencode still prompts me to approve each edit (external_directory
+				# "ask" on /home/horus/projects/*). horus can't do this itself — it's
+				# unprivileged inside the sandbox; running this IS the approval.
+				proj="''${2:-}"
+				if [ -z "$proj" ]; then
+					echo "usage: horus grant <project>" >&2; exit 1
+				fi
+				case "$proj" in
+					*/*|*..*) echo "horus: invalid project name '$proj'" >&2; exit 1 ;;
+				esac
+				src="/home/a3chron/Projects/$proj"
+				if [ ! -d "$src" ]; then
+					echo "horus: no such project: $src" >&2; exit 1
+				fi
+				if ! systemctl is-active -q container@horus.service; then
+					echo "horus: container not running — 'horus resume' first" >&2; exit 1
+				fi
+				sudo machinectl bind --mkdir horus "$src" "/home/horus/projects/$proj"
+				echo "horus: granted '$proj' for this session (clears on 'horus pause')"
+				;;
+			revoke)
+				# drop a grant mid-session; 'horus pause'/'resume' clears ALL grants anyway,
+				# so this is just occasional cleanup. umount must run as root INSIDE the
+				# container (the bind lives in the container's mount namespace) — this is
+				# NOT in the NOPASSWD set on purpose (a wildcard root shell is too broad to
+				# hand out passwordless), so revoke prompts for the sudo password. grant,
+				# the frequent path, stays passwordless. machinectl doesn't reliably
+				# propagate the inner exit code, so we key off a stdout marker.
+				proj="''${2:-}"
+				if [ -z "$proj" ]; then
+					echo "usage: horus revoke <project>" >&2; exit 1
+				fi
+				case "$proj" in
+					*/*|*..*) echo "horus: invalid project name '$proj'" >&2; exit 1 ;;
+				esac
+				out=$(sudo machinectl shell root@horus /run/current-system/sw/bin/bash -c \
+					"if grep -q ' /home/horus/projects/$proj ' /proc/mounts; then umount /home/horus/projects/$proj && rmdir /home/horus/projects/$proj && echo REVOKED; else echo NOTMOUNTED; fi")
+				case "$out" in
+					*REVOKED*)    echo "horus: revoked '$proj'" ;;
+					*NOTMOUNTED*) echo "horus: '$proj' was not granted" ;;
+					*)            echo "horus: revoke failed" >&2; exit 1 ;;
+				esac
+				;;
 			*)
-				echo "usage: horus [chat|pause|resume|status|log]" >&2
+				echo "usage: horus [chat|pause|resume|status|log|grant <project>|revoke <project>]" >&2
 				exit 1
 				;;
 			esac
@@ -105,6 +152,9 @@ in
 				"/run/current-system/sw/bin/systemctl start container@horus.service"
 				"/run/current-system/sw/bin/systemctl stop container@horus.service"
 				"/run/current-system/sw/bin/machinectl shell horus@horus *"
+				# `horus grant <project>`: single-segment names only (wrapper rejects
+				# '/' and '..'), so a grant can't escape ~/Projects
+				"/run/current-system/sw/bin/machinectl bind --mkdir horus /home/a3chron/Projects/* /home/horus/projects/*"
 			];
 		}
 	];

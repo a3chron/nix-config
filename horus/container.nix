@@ -21,6 +21,22 @@ in
 				hostPath = "/home/a3chron/Documents/obsidian/main";
 				isReadOnly = false;
 			};
+
+			# Always-available public projects (no `horus grant` needed), read-write
+			# so Horus can edit/format. Commits and pushes are gated in opencode.json
+			# (bash: git commit -> ask so Kurt approves after reviewing the diff and
+			# unattended runs auto-deny; git push -> deny; push is impossible anyway,
+			# no creds in the container). Personal projects are NOT here — they stay
+			# invisible until `horus grant` (see cli.nix).
+			"/home/horus/projects/portfolio" = {
+				hostPath = "/home/a3chron/Projects/portfolio";
+				isReadOnly = false;
+			};
+			# kaeru is a monorepo of three independent git repos (root has no .git)
+			"/home/horus/projects/kaeru" = {
+				hostPath = "/home/a3chron/Projects/kaeru";
+				isReadOnly = false;
+			};
 		};
 
 		config = { pkgs, lib, ... }: {

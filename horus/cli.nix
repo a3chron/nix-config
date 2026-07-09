@@ -98,6 +98,9 @@ let
 				fi
 				case "$proj" in
 					*/*|*..*) echo "horus: invalid project name '$proj'" >&2; exit 1 ;;
+					kaeru|portfolio)
+						echo "horus: '$proj' is always available (constant mount) — no grant needed"
+						exit 0 ;;
 				esac
 				src="/home/a3chron/Projects/$proj"
 				if [ ! -d "$src" ]; then
@@ -123,6 +126,8 @@ let
 				fi
 				case "$proj" in
 					*/*|*..*) echo "horus: invalid project name '$proj'" >&2; exit 1 ;;
+					kaeru|portfolio)
+						echo "horus: '$proj' is a constant mount — can't revoke" >&2; exit 1 ;;
 				esac
 				out=$(sudo machinectl shell root@horus /run/current-system/sw/bin/bash -c \
 					"if grep -q ' /home/horus/projects/$proj ' /proc/mounts; then umount /home/horus/projects/$proj && rmdir /home/horus/projects/$proj && echo REVOKED; else echo NOTMOUNTED; fi")

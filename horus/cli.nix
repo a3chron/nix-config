@@ -98,7 +98,7 @@ let
 				fi
 				case "$proj" in
 					*/*|*..*) echo "horus: invalid project name '$proj'" >&2; exit 1 ;;
-					kaeru|portfolio)
+					kaeru|portfolio|stellar)
 						echo "horus: '$proj' is always available (constant mount) — no grant needed"
 						exit 0 ;;
 				esac
@@ -126,7 +126,7 @@ let
 				fi
 				case "$proj" in
 					*/*|*..*) echo "horus: invalid project name '$proj'" >&2; exit 1 ;;
-					kaeru|portfolio)
+					kaeru|portfolio|stellar)
 						echo "horus: '$proj' is a constant mount — can't revoke" >&2; exit 1 ;;
 				esac
 				out=$(sudo machinectl shell root@horus /run/current-system/sw/bin/bash -c \

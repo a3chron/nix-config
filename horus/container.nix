@@ -37,6 +37,12 @@ in
 				hostPath = "/home/a3chron/Projects/kaeru";
 				isReadOnly = false;
 			};
+			# stellar: read-only — a public repo Kurt wants Horus able to read and
+			# analyse (lint/type-check work; edits/formatting fail on the RO mount)
+			"/home/horus/projects/stellar" = {
+				hostPath = "/home/a3chron/Projects/stellar";
+				isReadOnly = true;
+			};
 		};
 
 		config = { pkgs, lib, ... }: {

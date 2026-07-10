@@ -1,4 +1,4 @@
-# The `horus` CLI: chat (default) / pause / resume / status.
+# The `horus` CLI: chat (default) / pause / resume / cancel / status.
 # Narrow NOPASSWD sudo rules make pause/resume instant for a3chron.
 { config, pkgs, lib, ... }:
 
@@ -55,6 +55,20 @@ let
 				sudo systemctl stop container@horus.service
 				sudo systemctl stop llama-swap.service
 				echo "horus: paused — container stopped, model unloaded, VRAM freed"
+				;;
+			cancel|stop)
+				# Stop the current background agent run (voice / WhatsApp one-shots)
+				# WITHOUT unloading the model or stopping the container — for pausing
+				# use `horus pause`. Only the transient `opencode run` is killed; the
+				# persistent opencode server and an interactive `horus chat` (plain
+				# `opencode`, no "run") are left alone. machinectl doesn't reliably
+				# propagate the inner exit code, so key off a stdout marker (like revoke).
+				out=$(sudo machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
+					"if pkill -f 'opencode run'; then echo CANCELLED; else echo NONE; fi")
+				case "$out" in
+					*CANCELLED*) echo "horus: cancelled the current run — model stays loaded" ;;
+					*)           echo "horus: nothing running to cancel" ;;
+				esac
 				;;
 			status)
 				printf 'container:  %s\n' "$(systemctl is-active container@horus.service)"
@@ -138,7 +152,7 @@ let
 				esac
 				;;
 			*)
-				echo "usage: horus [chat|pause|resume|status|log|grant <project>|revoke <project>]" >&2
+				echo "usage: horus [chat|pause|resume|cancel|status|log|grant <project>|revoke <project>]" >&2
 				exit 1
 				;;
 			esac

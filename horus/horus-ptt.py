@@ -5,6 +5,8 @@
 # if the user was already on HFP (call/meeting), profiles are left untouched.
 import array
 import os
+import select
+import signal
 import subprocess
 import sys
 import time
@@ -21,6 +23,7 @@ WAV = "/tmp/horus-voice.wav"
 SOUNDS = "/run/current-system/sw/share/sounds/freedesktop/stereo"
 CHIME_START = f"{SOUNDS}/message-new-instant.oga"  # clear pop = "talk now"
 CHIME_STOP = f"{SOUNDS}/complete.oga"              # two-tone = "got it, thinking"
+CHIME_CANCEL = f"{SOUNDS}/dialog-error.oga"        # abort tone = "stopped"
 
 RATE = 16000
 CHUNK_BYTES = RATE * 2 // 10        # 0.1s of s16 mono
@@ -191,6 +194,80 @@ def record_until_silence():
     return WAV
 
 
+def drain(dev):
+    """Discard any queued key events (e.g. impatient extra presses)."""
+    try:
+        while dev.read_one() is not None:
+            pass
+    except BlockingIOError:
+        pass
+
+
+def cancel_run():
+    # Stop the in-flight agent run INSIDE the container without touching the
+    # model or the container: kill the transient `opencode run` (the voice /
+    # WhatsApp one-shots) and leave the persistent server + interactive chat
+    # alone. Same passwordless machinectl path horus-voice-respond uses.
+    try:
+        subprocess.run(
+            [
+                "/run/wrappers/bin/sudo", "-n",
+                "/run/current-system/sw/bin/machinectl", "shell", "horus@horus",
+                "/run/current-system/sw/bin/bash", "-c", "pkill -f 'opencode run'",
+            ],
+            timeout=15,
+            capture_output=True,
+        )
+    except Exception as e:
+        print(f"cancel_run failed: {e}", file=sys.stderr, flush=True)
+
+
+def respond(wav, dev):
+    """Run one voice round. A paddle press mid-round cancels it — the agent run
+    is killed (model stays loaded) and an abort tone plays. Blocks until the
+    round finishes or is cancelled."""
+    # Flush presses buffered during recording so they don't instantly "cancel"
+    # a round that just started.
+    drain(dev)
+    proc = subprocess.Popen(
+        ["horus-voice-respond", wav],
+        start_new_session=True,  # own group so we can tear down the whole local tree
+    )
+    cancelled = False
+    deadline = time.time() + 600  # backstop; inner opencode has its own 480s cap
+    while proc.poll() is None:
+        # wake on a key event or after 0.2s, so we notice both a cancel press
+        # and the process exiting without busy-looping
+        r, _, _ = select.select([dev.fd], [], [], 0.2)
+        if r:
+            try:
+                for ev in dev.read():
+                    if ev.type == ecodes.EV_KEY and ev.code == PTT_KEY and ev.value == 1:
+                        cancelled = True
+            except BlockingIOError:
+                pass
+        if cancelled or time.time() > deadline:
+            break
+
+    if proc.poll() is None:  # user cancel or backstop expiry: tear it down
+        print("cancelling voice round", flush=True)
+        cancel_run()  # stop the agent inside the container first
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.wait()
+        if cancelled:
+            chime(CHIME_CANCEL, wait=True)
+
+
 def find_device():
     for path in evdev.list_devices():
         d = InputDevice(path)
@@ -221,18 +298,10 @@ def main():
                     wav = record_until_silence()
                     if wav:
                         print("responding...", flush=True)
-                        try:
-                            subprocess.run(["horus-voice-respond", wav], timeout=600)
-                        except subprocess.TimeoutExpired:
-                            # don't let a hung round crash the daemon (would
-                            # drop the device grab and restart the service)
-                            print("voice respond timed out", file=sys.stderr, flush=True)
-                    # drop paddle presses queued while we were busy
-                    try:
-                        while dev.read_one() is not None:
-                            pass
-                    except BlockingIOError:
-                        pass
+                        respond(wav, dev)
+                    # drop paddle presses queued while we were busy (incl. the
+                    # cancelling press) so we don't immediately re-record
+                    drain(dev)
             else:
                 ui.write_event(ev)  # pass through play/pause etc.
                 ui.syn()

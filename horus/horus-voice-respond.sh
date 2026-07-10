@@ -105,7 +105,7 @@ conversational: 1-3 spoken sentences, absolutely no lists, no markdown, no issue
 # oversized fetch blowing the context) is detected instead of ending silent:
 # "answered" = some text arrived AFTER the last tool call.
 /run/wrappers/bin/sudo -n /run/current-system/sw/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
-	"cd /home/horus/work && timeout 240 opencode run --format json $sess_args $(printf '%q' "$prompt") 2>/dev/null" \
+	"cd /home/horus/work && timeout 480 opencode run --format json $sess_args $(printf '%q' "$prompt") 2>/dev/null" \
 	| stdbuf -oL tr -d '\r' | grep --line-buffered '^{' \
 	| jq --unbuffered -rc '
 		if .type=="text" then "T " + (.part.text | gsub("\n"; " "))

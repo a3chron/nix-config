@@ -68,21 +68,28 @@ in
 
 	environment.systemPackages = [ horusWarmup ];
 
-	# Warm the model at boot once the stack is up (skips itself if a GPU-heavy
-	# app is running — see horus-warmup.sh). The gate waits for llama-swap to
-	# answer before priming.
+	# Warm the model shortly AFTER boot, off the critical path (skips itself if a
+	# GPU-heavy app is running — see horus-warmup.sh). NOT wantedBy
+	# multi-user.target: as a boot oneshot systemd ordered it before
+	# multi-user.target, so graphical.target (gdm/Hyprland) waited out the full
+	# ~60s cold model load — a long grey screen every boot. A timer decouples it:
+	# the desktop comes up at once and the warmup runs behind it. The script
+	# self-gates on llama-swap/container readiness, so no ExecStartPre sleep.
 	systemd.services.horus-warmup = {
-		description = "Warm the Horus LLM + prompt cache at boot";
-		wantedBy = [ "multi-user.target" ];
+		description = "Warm the Horus LLM + prompt cache";
 		after = [ "llama-swap.service" "container@horus.service" "network-online.target" ];
 		wants = [ "network-online.target" ];
 		serviceConfig = {
 			Type = "oneshot";
-			# give llama-swap a moment to bind :8080 before the gate probes it
-			ExecStartPre = "${pkgs.coreutils}/bin/sleep 10";
 			ExecStart = "${horusWarmup}/bin/horus-warmup";
 			# priming does a full cold prefill of the ~10k-token prefix
 			TimeoutStartSec = 300;
 		};
+	};
+
+	systemd.timers.horus-warmup = {
+		wantedBy = [ "timers.target" ];
+		# let the desktop settle first, then warm the model in the background
+		timerConfig.OnBootSec = "45s";
 	};
 }

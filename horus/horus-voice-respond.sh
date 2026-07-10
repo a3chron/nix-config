@@ -92,12 +92,12 @@ fi
 prompt="[Voice message from Kurt, speech-to-text may have misheard words — interpret \
 phonetically similar words from context (check memory/INDEX.md for topics).] \
 $text \
-[IMPORTANT: This is voice — your words are read aloud by TTS. ORDER OF OPERATIONS: if you will \
-use ANY tool, your turn must BEGIN with a text-only step: one short sentence saying what you're \
-doing (like 'On it, checking Linear.') — send that sentence FIRST, before your first tool call, \
-never merged into the final answer. Kurt hears it immediately; silence while tools run feels \
-broken. Then call tools. Then answer SHORT and conversational: 1-3 spoken sentences, absolutely \
-no lists, no markdown, no issue-ID dumps.]"
+[IMPORTANT: This is voice — your words are read aloud by TTS. If your first tool call will take \
+a moment — web search, Linear, PDF, history, web fetch — BEGIN with one short spoken sentence \
+saying what you're doing (like 'On it, checking Linear.'), as its own text step before that tool \
+call, so Kurt isn't left in silence. For instant local actions (lights, sending a message, a \
+quick status) skip the preamble entirely — just do it and give the result. Answer SHORT and \
+conversational: 1-3 spoken sentences, absolutely no lists, no markdown, no issue-ID dumps.]"
 
 # absolute machinectl path: the NOPASSWD sudoers rule matches exactly this.
 # JSON events stream line-by-line; speak each text part as it arrives.

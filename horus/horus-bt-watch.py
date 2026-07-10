@@ -15,6 +15,21 @@ def set_voice(active):
     action = "start" if active else "stop"
     subprocess.run(["systemctl", "--user", action, "horus-voice.service"], check=False)
     print(f"voice {action}", flush=True)
+    if active:
+        # picking up the headphones = about to talk — warm the model now so the
+        # first request isn't a cold ~40-50s hit. horus-warmup gates itself
+        # (skips if a GPU-heavy app runs, the stack is paused, or it's already
+        # loaded), so fire-and-forget is safe.
+        try:
+            subprocess.Popen(
+                ["horus-warmup"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            print("warmup dispatched", flush=True)
+        except OSError as e:
+            print(f"warmup dispatch failed: {e}", flush=True)
 
 
 def props_changed(iface, changed, invalidated, path=None):

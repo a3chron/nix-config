@@ -18,11 +18,25 @@ let
 	# onnxruntime + phonemizer — no pip. Logic in ./horus-kokoro-tts.py (impure
 	# repo path, same pattern as the other voice scripts).
 	ttsEnv = pkgs.python3.withPackages (ps: [ ps.onnxruntime ps.phonemizer ps.numpy ]);
+	# horus-tts prefers the warm daemon (horus-kokoro, below) and only falls back
+	# to a cold one-shot synth if it isn't up — so a spoken reply normally pays
+	# just inference, not the model-load + phonemizer-init tax every time.
 	horusTts = pkgs.writeShellApplication {
 		name = "horus-tts";
 		text = ''
 			export PHONEMIZER_ESPEAK_LIBRARY=${pkgs.espeak-ng}/lib/libespeak-ng.so
-			exec ${ttsEnv}/bin/python /home/a3chron/nixos-config/horus/horus-kokoro-tts.py "$@"
+			cfg=/home/a3chron/nixos-config/horus
+			if ${ttsEnv}/bin/python "$cfg/horus-kokoro-client.py" "$@"; then
+				exit 0
+			fi
+			exec ${ttsEnv}/bin/python "$cfg/horus-kokoro-tts.py" "$@"
+		'';
+	};
+	horusKokoroDaemon = pkgs.writeShellApplication {
+		name = "horus-kokoro-daemon";
+		text = ''
+			export PHONEMIZER_ESPEAK_LIBRARY=${pkgs.espeak-ng}/lib/libespeak-ng.so
+			exec ${ttsEnv}/bin/python /home/a3chron/nixos-config/horus/horus-kokoro-daemon.py
 		'';
 	};
 
@@ -70,9 +84,23 @@ in
 		};
 	};
 
+	# warm TTS engine: loaded once, kept resident while the headphones are
+	# connected (PartOf horus-voice, so it starts/stops with the voice pipeline).
+	systemd.user.services.horus-kokoro = {
+		description = "Warm Kokoro TTS daemon for Horus voice replies";
+		partOf = [ "horus-voice.service" ];
+		serviceConfig = {
+			ExecStart = "${horusKokoroDaemon}/bin/horus-kokoro-daemon";
+			Restart = "on-failure";
+			RestartSec = 5;
+		};
+	};
+
 	systemd.user.services.horus-voice = {
 		description = "Horus push-to-talk voice pipeline";
 		# started/stopped by horus-bt-watch, never at login
+		wants = [ "horus-kokoro.service" ];  # pull the warm TTS daemon up with us
+		after = [ "horus-kokoro.service" ];
 		path = [ pkgs.pipewire pkgs.pulseaudio voiceRespond "/run/wrappers" ];
 		environment.HORUS_HEADPHONE_MAC = headphoneMac;
 		serviceConfig = {

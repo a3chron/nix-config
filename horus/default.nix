@@ -8,6 +8,8 @@
 		./searxng.nix
 		./cli.nix
 		./voice.nix
+		./music.nix
+		./studium.nix
 		./briefing.nix
 		./backup.nix
 	];

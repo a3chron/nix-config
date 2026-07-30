@@ -85,12 +85,18 @@ in
 			# there, resolves even while its internet is parental-blocked),
 			# .178.1 = house net via WiFi as fallback. timeout:2 caps the stall
 			# when the first one is unreachable (cable unplugged).
+			# 1.1.1.1 third: away from the fritz networks (hotspot, other WiFi)
+			# both router IPs are unreachable and the container had NO working
+			# DNS at all — the WA bridge was dark 2026-07-14→16 because of this.
+			# At home it's never queried (the fritz answers first); away, each
+			# lookup stalls ~4s on the dead router IPs, then works. glibc uses
+			# at most 3 nameservers, so this fills the last slot.
 			networking.useHostResolvConf = lib.mkForce false;
 			networking.resolvconf.enable = lib.mkForce false;
 			# plain string, not '': tab indentation would survive inside '' and
 			# glibc ignores resolv.conf lines that don't start with the keyword
 			environment.etc."resolv.conf".text =
-				"nameserver 192.168.180.1\nnameserver 192.168.178.1\noptions timeout:2 attempts:2\n";
+				"nameserver 192.168.180.1\nnameserver 192.168.178.1\nnameserver 1.1.1.1\noptions timeout:2 attempts:2\n";
 
 			# agent always works from ~/work (bind-mounted ~/horus on the host),
 			# where opencode.json + AGENTS.md live

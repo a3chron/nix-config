@@ -44,7 +44,9 @@ let
 	# (deliberately impure, like the ptt daemon — tunable via service restart).
 	voiceRespond = pkgs.writeShellApplication {
 		name = "horus-voice-respond";
-		runtimeInputs = [ whisper-cpp unstable.piper-tts horusTts pkgs.pipewire pkgs.pulseaudio pkgs.jq pkgs.python3 ];
+		# curl: talks to the horus-music daemon (music.nix) to skip TTS when a
+		# song just started and to pause/resume music around spoken replies
+		runtimeInputs = [ whisper-cpp unstable.piper-tts horusTts pkgs.pipewire pkgs.pulseaudio pkgs.jq pkgs.python3 pkgs.curl ];
 		text = ''
 			exec ${pkgs.runtimeShell} /home/a3chron/nixos-config/horus/horus-voice-respond.sh "$@"
 		'';

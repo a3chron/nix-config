@@ -43,6 +43,14 @@ in
 				hostPath = "/home/a3chron/Projects/stellar";
 				isReadOnly = true;
 			};
+
+			# music library, read-only: playback happens on the HOST (the
+			# horus-music daemon in music.nix, reached on localhost:8877 via the
+			# music tool) — this mount just lets Horus browse/search the files
+			"/home/horus/music" = {
+				hostPath = "/home/a3chron/Music";
+				isReadOnly = true;
+			};
 		};
 
 		config = { pkgs, lib, ... }: {

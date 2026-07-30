@@ -13,7 +13,33 @@ whisper_model=/var/lib/llm/models/ggml-large-v3-turbo.bin
 piper_voice=/var/lib/llm/models/piper-en_US-lessac-medium.onnx
 wav="$1"
 tmpdir=$(mktemp -d /tmp/horus-voice.XXXXXX)
-trap 'rm -rf "$tmpdir"' EXIT
+
+# Music integration (horus-music daemon, music.nix): two rules keep songs and
+# spoken replies from talking over each other.
+#  1. A song that STARTED during this round IS the answer — every later TTS
+#     part (and the no-answer fallbacks) is skipped.
+#  2. Music that was already playing BEFORE the round is paused for the first
+#     spoken part ("ducked") and resumed when the round ends.
+music=http://127.0.0.1:8877
+round_start=$(date +%s)
+music_state() { curl -sf -m 1 "$music/status" 2>/dev/null | jq -r '.state // "stopped"'; }
+music_started_this_round() {
+	local at
+	at=$(curl -sf -m 1 "$music/status" 2>/dev/null \
+		| jq -r 'if .state != "stopped" then (.started_at // 0 | floor) else empty end')
+	[ -n "$at" ] && [ "$at" -ge "$round_start" ]
+}
+
+cleanup() {
+	if [ -f "$tmpdir/ducked" ]; then
+		curl -sf -m 1 -X POST "$music/resume" >/dev/null 2>&1
+	fi
+	rm -rf "$tmpdir"
+}
+trap cleanup EXIT
+# paddle-cancel SIGTERMs our process group (horus-ptt.py, with a grace period
+# before SIGKILL) — route it through exit so cleanup still resumes ducked music
+trap 'exit 143' TERM INT
 
 # voice rounds share one opencode session while they come <30 min apart, so
 # follow-up questions keep the previous exchange in context (and the prompt
@@ -42,6 +68,15 @@ play() {
 
 # markdown -> speakable text, then synthesize + play (blocking, so parts queue)
 speak() {
+	# a song the agent just started is the answer — don't talk over it
+	if music_started_this_round; then
+		echo "music started this round — skipping TTS"
+		return 0
+	fi
+	# duck pre-existing music while Horus speaks (resumed in cleanup)
+	if [ ! -f "$tmpdir/ducked" ] && [ "$(music_state)" = "playing" ]; then
+		curl -sf -m 1 -X POST "$music/pause" >/dev/null 2>&1 && touch "$tmpdir/ducked"
+	fi
 	local spoken
 	spoken=$(echo "$1" | sed -E \
 		-e 's/\*\*([^*]+)\*\*/\1/g' \
@@ -139,7 +174,11 @@ did not ask about. Save the details for when the request was an actual question.
 		esac
 	done
 
-if [ ! -f "$tmpdir/spoke" ]; then
+if music_started_this_round; then
+	# the song is the answer — a round with no (spoken) text is expected here,
+	# so neither fallback applies
+	echo "round ended with music playing"
+elif [ ! -f "$tmpdir/spoke" ]; then
 	echo "no reply text received"
 	# a stale/broken session id would keep failing every round — drop it
 	[ -n "$sess_args" ] && rm -f "$sess_file"

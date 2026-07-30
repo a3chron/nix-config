@@ -97,7 +97,10 @@ a moment — web search, Linear, PDF, history, web fetch — BEGIN with one shor
 saying what you're doing (like 'On it, checking Linear.'), as its own text step before that tool \
 call, so Kurt isn't left in silence. For instant local actions (lights, sending a message, a \
 quick status) skip the preamble entirely — just do it and give the result. Answer SHORT and \
-conversational: 1-3 spoken sentences, absolutely no lists, no markdown, no issue-ID dumps.]"
+conversational: 1-3 spoken sentences, absolutely no lists, no markdown, no issue-ID dumps. \
+Every word costs TTS synth time and Kurt's listening time. After an action, confirm in a few \
+words ('Done.', 'Lights are white.') — do NOT read back parameters, numbers or settings Kurt \
+did not ask about. Save the details for when the request was an actual question.]"
 
 # absolute machinectl path: the NOPASSWD sudoers rule matches exactly this.
 # JSON events stream line-by-line; speak each text part as it arrives.

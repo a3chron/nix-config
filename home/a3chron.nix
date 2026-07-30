@@ -4,8 +4,15 @@
   home.username = "a3chron";
   home.homeDirectory = "/home/a3chron";
   home.stateVersion = "25.11";
-	home.sessionVariables = {
-		GTK_IM_MODULE = "simple"; # Fix ghostty dead-key (`)
+	# NOTE: home.sessionVariables only lands in hm-session-vars.{sh,fish}, i.e. it
+	# reaches interactive shells only. GUI apps are started by
+	# systemd --user -> uwsm -> Hyprland, which never sources those, so they used
+	# to get GTK_IM_MODULE unset -> GTK4 picked its Wayland text-input-v3 context
+	# -> nothing composed dead keys / Multi_key (they arrived as a bare ESC).
+	# systemd.user.sessionVariables writes ~/.config/environment.d/, which the
+	# user manager and therefore every GUI app does inherit. Needs a re-login.
+	systemd.user.sessionVariables = {
+		GTK_IM_MODULE = "simple"; # compose key support in ghostty / zen
 	};
 	home.sessionPath = [
 		"$HOME/.local/bin"

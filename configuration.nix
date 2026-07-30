@@ -82,13 +82,16 @@
   programs.dconf.enable = true;
 
   # Configure keymap in X11
+  # nodeadkeys: ^ ` ´ are literal single presses instead of dead keys. Accented
+  # chars (ñ â á à …) come from the compose key instead — see compose:rctrl.
   services.xserver.xkb = {
     layout = "de";
-    variant = "";
+    variant = "nodeadkeys";
+    options = "terminate:ctrl_alt_bksp,compose:rctrl";
   };
 
   # Configure console keymap
-  console.keyMap = "de";
+  console.keyMap = "de-latin1-nodeadkeys";
 
   # Enable CUPS to print documents.
   services.printing.enable = true;

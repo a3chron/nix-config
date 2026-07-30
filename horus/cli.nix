@@ -30,11 +30,27 @@ let
 				st=""
 				for _ in $(seq 1 40); do
 					st=$(curl -sf --max-time 2 http://127.0.0.1:8765/status | jq -r '.status' || true)
-					if [ "$st" = "connected" ]; then break; fi
+					# logged-out / waiting-for-qr-scan are terminal — the bridge won't
+					# reconnect on its own, so don't sit out the full 40s
+					case "$st" in connected|logged-out|waiting-for-qr-scan) break ;; esac
 					sleep 1
 				done
 				if [ "$st" != "connected" ]; then
-					echo "whatsapp: ''${st:-bridge unreachable} — offline? bridge keeps retrying and catches up once online"
+					case "''${st:-}" in
+					logged-out)
+						# genuine logout (creds revoked server-side) — retrying is pointless,
+						# only a re-pair helps; don't dress this up as an offline blip
+						echo "whatsapp: LOGGED OUT — the pairing was revoked, the bridge will NOT retry."
+						echo "whatsapp: re-pair: rm -rf ~/horus/wa-auth && sudo systemctl restart container@horus.service,"
+						echo "whatsapp: then scan the QR from ~/horus/bridge/bridge.log with the agent's phone"
+						;;
+					waiting-for-qr-scan)
+						echo "whatsapp: waiting for QR scan — scan the QR in ~/horus/bridge/bridge.log with the agent's phone"
+						;;
+					*)
+						echo "whatsapp: ''${st:-bridge unreachable} — offline? bridge keeps retrying and catches up once online"
+						;;
+					esac
 				else
 					sleep 8 # WhatsApp replays while-away messages just after connect; responder debounce is 5s
 					info=$(curl -sf --max-time 2 http://127.0.0.1:8765/status || echo '{}')
@@ -83,6 +99,9 @@ let
 						+ (if .running then " — answering now" elif (.pending // 0) > 0 then " — \(.pending) queued" else "" end)
 						+ (if .status != "connected" and .lastCloseReason then " — last close \(.lastCloseReason)" else "" end)
 						+ (if .status != "connected" and .lastConnectedAt then ", last connected \(.lastConnectedAt)" else "" end)')"
+					if [ "$(echo "$wa" | jq -r '.status')" = "logged-out" ]; then
+						printf 'whatsapp:   %s\n' "re-pair needed: rm -rf ~/horus/wa-auth, restart container, scan QR from bridge.log"
+					fi
 				else
 					printf 'whatsapp:   %s\n' "unreachable (container down?)"
 				fi

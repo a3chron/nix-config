@@ -139,18 +139,56 @@ did not ask about. Save the details for when the request was an actual question.
 
 # absolute machinectl path: the NOPASSWD sudoers rule matches exactly this.
 # JSON events stream line-by-line; speak each text part as it arrives.
-# Tool/error events become markers so a run that dies mid-tools (e.g. an
-# oversized fetch blowing the context) is detected instead of ending silent:
-# "answered" = some text arrived AFTER the last tool call.
+# machinectl gives a PTY (stdout+stderr merged, \r injected) and does NOT
+# propagate the inner exit code — so the container wrapper keeps opencode's
+# stderr in a temp file, replays it '!'-prefixed after the run, and reports
+# the exit status as a %%EXIT sentinel line. jq classifies every line:
+#   T text  U tool ok (name\tdetail\tms)  V tool failed  F step finish reason
+#   E stream error  S session id  R stderr/garbage  X exit code
+# A healthy run's last step finishes with reason "stop" — anything else
+# (tool-calls after a permission auto-reject, length) means it died owing
+# work; the marker files below let the post-loop check speak up about it.
 /run/wrappers/bin/sudo -n /run/current-system/sw/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
-	"cd /home/horus/work && timeout 480 opencode run --format json $sess_args $(printf '%q' "$prompt") 2>/dev/null" \
-	| stdbuf -oL tr -d '\r' | grep --line-buffered '^{' \
-	| jq --unbuffered -rc '
-		if .type=="text" then "T " + (.part.text | gsub("\n"; " "))
-		elif .type=="tool_use" then "U " + (.part.tool // "?") + (if (.part.state.input.filePath // "") != "" then "\t" + .part.state.input.filePath else "" end)
-		elif .type=="error" then "E " + (tostring | .[0:200])
-		elif .type=="step_start" then "S " + (.sessionID // empty)
-		else empty end' 2>/dev/null \
+	"cd /home/horus/work && err=\$(mktemp); timeout 600 opencode run --format json $sess_args $(printf '%q' "$prompt") 2>\"\$err\"; ec=\$?; sed 's/^/!/' \"\$err\" | tail -n 20; rm -f \"\$err\"; echo \"%%EXIT \$ec\"" \
+	| stdbuf -oL tr -d '\r' \
+	| jq --unbuffered -Rrc '
+		def clean: tostring | gsub("[\t\n\r]"; " ") | .[0:120];
+		def detail($t; $i):
+			if $t == "bash" then ($i.description // (($i.command // "") | tostring | .[0:60]))
+			elif $t == "linear_manage" then ([$i.action, $i.identifier, $i.project, $i.title] | map(select(. != null and . != "")) | join(" "))
+			elif $t == "linear_issues" then ($i.filter // "assigned")
+			elif $t == "glob" or $t == "grep" then ($i.pattern // "")
+			elif $t == "read" or $t == "write" or $t == "edit" then ($i.filePath // "")
+			elif $t == "web_search" then ($i.query // "")
+			elif $t == "web_fetch" then ($i.url // "")
+			elif $t == "whatsapp_send" then ($i.to // "")
+			elif $t == "music" then ([$i.action, $i.query] | map(select(. != null and . != "")) | join(" "))
+			elif $t == "nanoleaf" or $t == "studium" then ($i.action // "")
+			elif $t == "pdf" then ($i.file // "")
+			elif $t == "history" then ([$i.source, $i.since] | map(select(. != null and . != "")) | join(" "))
+			elif $t == "task" then ($i.description // "")
+			else "" end;
+		. as $raw | try (
+			fromjson
+			| if .type == "text" then "T " + (.part.text | gsub("[\t\n\r]"; " "))
+			elif .type == "tool_use" then
+				(.part.tool // "?") as $t
+				| ((.part.state.input // {}) | if type == "object" then . else {} end) as $i
+				| if (.part.state.status // "") == "error"
+					then "V " + $t + "\t" + ((.part.state.error // "") | clean)
+					else "U " + $t + "\t" + (detail($t; $i) | clean) + "\t"
+						+ (.part.state.time as $tm | if $tm != null and $tm.end != null and $tm.start != null then (($tm.end - $tm.start) | tostring) else "" end)
+					end
+			elif .type == "step_finish" then "F " + (.part.reason // "?")
+			elif .type == "error" then "E " + (tostring | .[0:200])
+			elif .type == "step_start" then "S " + (.sessionID // empty)
+			else empty end
+		) catch (
+			if ($raw | startswith("%%EXIT ")) then "X " + $raw[7:]
+			elif ($raw | startswith("!")) then (($raw[1:] | clean) as $e | if ($e | gsub(" "; "")) == "" then empty else "R " + $e end)
+			elif ($raw | gsub("[ \t]"; "")) == "" then empty
+			else "R " + ($raw | clean) end
+		)' 2>/dev/null \
 	| while IFS= read -r line; do
 		kind="${line:0:1}"
 		payload="${line:2}"
@@ -165,6 +203,19 @@ did not ask about. Save the details for when the request was an actual question.
 			echo "tool: $payload"
 			rm -f "$tmpdir/answered"
 			;;
+		V)
+			echo "tool failed: $payload"
+			rm -f "$tmpdir/answered"
+			;;
+		F)
+			printf '%s' "$payload" > "$tmpdir/finish"
+			;;
+		X)
+			printf '%s' "$payload" > "$tmpdir/exit"
+			;;
+		R)
+			echo "agent stderr: $payload"
+			;;
 		E)
 			echo "agent error: $payload"
 			;;
@@ -174,16 +225,37 @@ did not ask about. Save the details for when the request was an actual question.
 		esac
 	done
 
+ec=""
+[ -f "$tmpdir/exit" ] && ec=$(cat "$tmpdir/exit")
+finish=""
+[ -f "$tmpdir/finish" ] && finish=$(cat "$tmpdir/finish")
+if [ -z "$ec" ]; then
+	# machinectl/sudo/pipe died before the container wrapper could report
+	echo "agent exit status missing — machinectl pipeline died"
+elif [ "$ec" = "124" ]; then
+	echo "agent exited 124 (timeout 600s)"
+elif [ "$ec" != "0" ]; then
+	echo "agent exited $ec"
+fi
+
+# died = the run ended still owing work: last step finished wanting more
+# tools (e.g. a permission auto-reject killed it mid-plan), output was
+# truncated ("length"), nonzero/killed exit, or no text after the last tool
+died=""
+[ -f "$tmpdir/spoke" ] && [ ! -f "$tmpdir/answered" ] && died=1
+[ -n "$finish" ] && [ "$finish" != "stop" ] && died=1
+[ -n "$ec" ] && [ "$ec" != "0" ] && died=1
+
 if music_started_this_round; then
 	# the song is the answer — a round with no (spoken) text is expected here,
 	# so neither fallback applies
 	echo "round ended with music playing"
 elif [ ! -f "$tmpdir/spoke" ]; then
-	echo "no reply text received"
+	echo "no reply text received (finish=${finish:-none} exit=${ec:-none})"
 	# a stale/broken session id would keep failing every round — drop it
 	[ -n "$sess_args" ] && rm -f "$sess_file"
 	speak "Sorry, something went wrong — I didn't get an answer back."
-elif [ ! -f "$tmpdir/answered" ]; then
-	echo "round died mid-tools, no final answer"
+elif [ -n "$died" ]; then
+	echo "round died mid-tools (finish=${finish:-none} exit=${ec:-none})"
 	speak "Sorry — something broke while I was working on that, and I didn't get a result back."
 fi

@@ -234,7 +234,7 @@ def respond(wav, dev):
         start_new_session=True,  # own group so we can tear down the whole local tree
     )
     cancelled = False
-    deadline = time.time() + 600  # backstop; inner opencode has its own 480s cap
+    deadline = time.time() + 720  # backstop; inner opencode has its own 600s cap
     while proc.poll() is None:
         # wake on a key event or after 0.2s, so we notice both a cancel press
         # and the process exiting without busy-looping

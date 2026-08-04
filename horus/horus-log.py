@@ -61,6 +61,12 @@ def parse(entry):
         return ("rec_done", "", ts)
     if msg.startswith("tool: "):
         return ("tool", msg[len("tool: "):].strip(), ts)
+    if msg.startswith("tool failed: "):
+        return ("toolfail", msg[len("tool failed: "):].strip(), ts)
+    if msg.startswith("agent stderr: "):
+        return ("sys", "stderr: " + msg[len("agent stderr: "):].strip()[:120], ts)
+    if msg.startswith("agent exited") or msg.startswith("agent exit status missing"):
+        return ("sys", msg.strip(), ts)
     m = re.match(r"synth: (\d+)ms", msg)
     if m:
         return ("synth", f"{int(m.group(1)) / 1000:.1f}", ts)
@@ -177,8 +183,36 @@ class Renderer:
             self.body(text)
         elif kind == "tool":
             self.ensure_turn("Horus", ts)
-            name, _, path = text.partition("\t")  # "read\t/home/horus/work/…"
-            self.stage(name, ts, short_path(path) if path else None)
+            name, _, rest = text.partition("\t")  # "read\tvault/x.md\t1234"
+            detail, _, ms = rest.partition("\t")
+            detail = short_path(detail) if detail else None
+            if ms.isdigit():
+                # the event carries the real tool duration (parts are emitted
+                # at completion): the tool ran [ts-dur, ts], so the open
+                # thinking stage ends at ts-dur (clamped — parts can complete
+                # out of order within a step), and the LLM time between tools
+                # shows as thinking instead of inflating the tool's number
+                dur = int(ms) / 1000
+                end = ts - dur
+                if self.stage_open and end < self.stage_open[1]:
+                    end = self.stage_open[1]
+                self.finish_stage(end)
+                self.sep()
+                print(f"  {OVERLAY0}· {self.core(name, detail)} ({dur:.1f}s){RESET}")
+                self.stage("thinking", ts)
+            else:
+                # pre-duration journal lines (old format): gap-based stage
+                self.stage(name, ts, detail)
+        elif kind == "toolfail":
+            self.ensure_turn("Horus", ts)
+            name, _, error = text.partition("\t")
+            self.finish_stage(ts)
+            self.sep()
+            line = f"  {OVERLAY0}· {name} — failed{RESET}"
+            if error:
+                line += f" {SURFACE2}({error[:80]}){RESET}"
+            print(line)
+            self.stage("thinking", ts)  # the model usually keeps going after a failed tool
         elif kind == "synth":
             self.ensure_turn("Horus", ts)
             self.sep()

@@ -93,8 +93,18 @@ def send_whatsapp(text):
         return False
 
 
+def music_call(path, method="GET"):
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:8877{path}", method=method)
+        with urllib.request.urlopen(req, timeout=3) as r:
+            return json.load(r)
+    except Exception:
+        return None
+
+
 def speak(text):
     wav = None
+    ducked = False
     try:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
             wav = tf.name
@@ -102,12 +112,19 @@ def speak(text):
             return False
         if os.path.getsize(wav) == 0:
             return False
+        # duck horus-music while speaking (same idea as voice rounds) — a
+        # question mixed under a running song is easy to miss entirely
+        st = music_call("/status")
+        if st and st.get("state") == "playing":
+            ducked = music_call("/pause", "POST") is not None
         ok = subprocess.run([PWPLAY, wav], capture_output=True, timeout=120).returncode == 0
         return ok
     except Exception as e:
         log(f"speak failed: {e}")
         return False
     finally:
+        if ducked:
+            music_call("/resume", "POST")
         if wav:
             try:
                 os.unlink(wav)
@@ -169,11 +186,26 @@ def shquote(s):
 def deliver(job, text):
     ch = job["channel"]
     if ch == "speak":
-        return speak(text) or send_whatsapp(f"(speakers unavailable) {text}")
+        if speak(text):
+            log(f"{job['id']}: spoken on the default sink")
+            return True
+        if send_whatsapp(f"(speakers unavailable) {text}"):
+            log(f"{job['id']}: speakers failed — delivered via WhatsApp")
+            return True
+        return False
     if ch == "whatsapp":
-        return send_whatsapp(text)
+        ok = send_whatsapp(text)
+        if ok:
+            log(f"{job['id']}: delivered via WhatsApp")
+        return ok
     # auto: speakers first, whatsapp fallback
-    return speak(text) or send_whatsapp(text)
+    if speak(text):
+        log(f"{job['id']}: spoken on the default sink")
+        return True
+    if send_whatsapp(text):
+        log(f"{job['id']}: speakers unavailable — delivered via WhatsApp")
+        return True
+    return False
 
 
 def fire_catchup(missed):

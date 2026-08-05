@@ -13,8 +13,12 @@ PATH_SUFFIX = "dev_" + MAC.replace(":", "_")
 
 def set_voice(active):
     action = "start" if active else "stop"
-    subprocess.run(["systemctl", "--user", action, "horus-voice.service"], check=False)
-    print(f"voice {action}", flush=True)
+    r = subprocess.run(["systemctl", "--user", action, "horus-voice.service"], check=False, capture_output=True, text=True)
+    if r.returncode != 0:
+        # the old unconditional "voice start" log line hid exactly this case
+        print(f"voice {action} FAILED (rc={r.returncode}): {r.stderr.strip()}", flush=True)
+    else:
+        print(f"voice {action}", flush=True)
     if active:
         # picking up the headphones = about to talk — warm the model now so the
         # first request isn't a cold ~40-50s hit. horus-warmup gates itself
@@ -52,7 +56,14 @@ try:
     obj = bus.get_object("org.bluez", f"/org/bluez/hci0/{PATH_SUFFIX}")
     props = dbus.Interface(obj, "org.freedesktop.DBus.Properties")
     set_voice(bool(props.Get("org.bluez.Device1", "Connected")))
-except dbus.exceptions.DBusException:
-    pass
+except dbus.exceptions.DBusException as e:
+    # normal when the headphones are simply not connected/paired at start,
+    # but log it — a swallowed BlueZ error here used to mean a dead paddle
+    # for the whole session with zero trace
+    print(f"initial connect probe: {e} (headphones probably not connected — waiting for signals)", flush=True)
 
 GLib.MainLoop().run()
+# the mainloop returning (D-Bus connection lost) is NOT a clean shutdown —
+# exit non-zero so systemd restarts the watcher instead of leaving the paddle dead
+print("D-Bus main loop exited — restarting", flush=True)
+raise SystemExit(1)

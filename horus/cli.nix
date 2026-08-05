@@ -56,14 +56,16 @@ let
 					info=$(curl -sf --max-time 2 http://127.0.0.1:8765/status || echo '{}')
 					pending=$(echo "$info" | jq -r '.pending // 0')
 					running=$(echo "$info" | jq -r '.running // false')
-					unknown=$(echo "$info" | jq -r '.unknownCount // 0')
+					# unknownRecent (last 7d), not the all-time count — the permanent
+					# warning had become unreadable noise
+					unknown=$(echo "$info" | jq -r '.unknownRecent // .unknownCount // 0')
 					if [ "$running" = "true" ] || [ "$pending" -gt 0 ]; then
 						echo "whatsapp: connected — messages arrived while away, agent is answering them now"
 					else
 						echo "whatsapp: connected — nothing waiting"
 					fi
 					if [ "$unknown" -gt 0 ]; then
-						echo "whatsapp: note: $unknown message(s) from unknown senders held back"
+						echo "whatsapp: note: $unknown recent message(s) from unknown senders held back"
 					fi
 				fi
 				;;
@@ -112,6 +114,20 @@ let
 						printf 'vram:       %s/%s MiB\n' "$used" "$total"
 					fi
 				done
+				# full unit health: anything FAILED is flagged (inactive is often
+				# normal, e.g. horus-voice without headphones). Previously status
+				# covered 4 of ~12 units and the rest could be dead for weeks.
+				for u in horus-warmup.service horus-backup.timer horus-briefing.timer horus-backup.service horus-briefing.service; do
+					if systemctl is-failed -q "$u" 2>/dev/null; then
+						printf 'ALERT:      %s FAILED (journalctl -u %s)\n' "$u" "$u"
+					fi
+				done
+				for u in horus-bt-watch horus-kokoro horus-voice horus-music horus-studium horus-wakeup-drain.service horus-wakeup-drain.timer; do
+					if systemctl --user is-failed -q "$u" 2>/dev/null; then
+						printf 'ALERT:      user %s FAILED (journalctl --user -u %s)\n' "$u" "$u"
+					fi
+				done
+				printf 'backup:     last %s\n' "$(cat /home/a3chron/horus/memory/.last-backup 2>/dev/null || echo 'no stamp yet (runs daily)')"
 				;;
 			log)
 				# live voice-pipeline view: what whisper heard, what horus replied.

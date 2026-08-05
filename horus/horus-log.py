@@ -44,7 +44,19 @@ def short_path(p):
 
 def parse(entry):
     """journal json entry -> (kind, text, ts) or None"""
+    # sudo logs its audit trail (PWD=/COMMAND=..., "(command continued)",
+    # pam_unix session open/close) into the unit's journal on every
+    # machinectl call — pure noise here, drop by the emitting process
+    if entry.get("_COMM") == "sudo":
+        return None
     msg = entry.get("MESSAGE", "")
+    if isinstance(msg, str) and entry.get("_COMM") == "systemd" and (
+        msg.startswith(("Started ", "Stopped ", "Stopping ", "Starting "))
+        or "Consumed " in msg
+        or "Deactivated successfully" in msg
+        or "Scheduled restart job" in msg
+    ):
+        return None  # unit lifecycle chatter (bt-watch churns the unit a lot); "Main process exited …/FAILURE" still shows
     if isinstance(msg, list):  # journald encodes non-utf8 as byte arrays
         msg = bytes(msg).decode("utf-8", errors="replace")
     ts = int(entry.get("__REALTIME_TIMESTAMP", "0")) / 1e6
@@ -75,11 +87,35 @@ def parse(entry):
         ("no reply text received", "no reply — spoke fallback"),
         ("no bluetooth mic source found", "no bluetooth mic found"),
         ("kokoro failed", "kokoro failed — piper fallback"),
+        ("kokoro:", None),  # phoneme-drop / truncation warnings — show as-is
         ("agent error", "agent error"),
         ("round died mid-tools", "run died mid-tools — no result"),
+        ("whisper FAILED", None),
+        ("cancelling voice round", "round cancelled (paddle)"),
+        ("timeout: ", None),
+        ("chime failed", None),
+        ("music started this round", "music is the answer — TTS skipped"),
+        ("recording hit the", "recording hit the 45s cap"),
+        ("TTS produced no audio", "TTS produced no audio"),
+        ("audio playback failed", "audio playback failed"),
+        ("part was not spoken", "part NOT spoken (TTS/playback failed)"),
+        ("dropped harness internal", "dropped harness-internal text"),
+        ("resumed music left paused", "resumed music after cancel"),
+        ("warmup dispatch", None),
+        ("input device gone", "headphones disconnected — ptt exiting"),
+        ("voice start FAILED", None),
+        ("voice stop FAILED", None),
     ]:
         if msg.startswith(prefix):
-            return ("sys", label, ts)
+            return ("sys", (label if label is not None else msg.strip()[:120]), ts)
+    # known chatter that carries no diagnostic value
+    for noise in ("ptt key event", "grabbing /dev", "synth:"):
+        if msg.startswith(noise):
+            return None
+    # any OTHER unmatched line: render dimmed instead of dropping — dropped
+    # lines were exactly the ones that mattered when something new went wrong
+    if msg.strip():
+        return ("sys", msg.strip()[:120], ts)
     return None
 
 
@@ -224,10 +260,15 @@ class Renderer:
 
 
 def full_history_events():
-    out = subprocess.run(
+    r = subprocess.run(
         ["journalctl", "--user", "-u", UNIT, "-o", "json", "--no-pager", "-n", "3000"],
         capture_output=True, text=True,
-    ).stdout
+    )
+    if r.returncode != 0:
+        # "couldn't read history" must not render as "no history"
+        print(f"journalctl failed (rc={r.returncode}): {r.stderr.strip()[:200]}", flush=True)
+        return []
+    out = r.stdout
     events = []
     for line in out.splitlines():
         try:

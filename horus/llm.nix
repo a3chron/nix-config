@@ -26,6 +26,16 @@ let
 		models = {
 			"qwen3.6-35b" = {
 				# ${PORT} is a llama-swap macro, not shell — escaped for Nix below
+				# --n-cpu-moe 30 re-verified optimal 2026-08-05 (llama-bench, desktop using
+				# ~2.2GiB VRAM): 30 → 33.4 tok/s @ 9.9GiB total; 28 → 34.1 @ 10.9 (no
+				# headroom for whisper); 26 → 25.6 @ 11.8 (spills); 24 → pp COLLAPSES to
+				# 90 tok/s; 32 → 32.7. -ub/-b changes: no effect. Don't lower it.
+				# sampling pinned to the GGUF author's recommendation (general.sampling.*
+				# metadata: temp 1.0 / top-p 0.95 / top-k 20). Without this the effective
+				# values were llama-server's defaults (0.8/0.95/40) — chosen by nobody and
+				# silently changeable by any flake bump. opencode sends no sampling params
+				# for custom providers (capabilities.temperature=false), so this is the
+				# single authoritative place.
 				cmd = ''
 					${llama-cpp}/bin/llama-server
 					--port ''${PORT}
@@ -37,8 +47,11 @@ let
 					--ctx-size 65536
 					--n-gpu-layers 999
 					--n-cpu-moe 30
+					--temp 1.0
+					--top-p 0.95
+					--top-k 20
 				'';
-				ttl = 14400; # unload after 4h idle — fewer cold starts across a day of on/off use; heavy GPU work = `horus pause` (browsing/music/YouTube coexist fine with it loaded)
+				ttl = 28800; # unload after 8h idle (4h evicted the model between afternoon and the 19:45-23:00 voice cluster — 7 of 9 evening rounds paid a ~60s cold start); heavy GPU work = `horus pause`
 			};
 		};
 	};
@@ -53,7 +66,12 @@ in
 		description = "llama-swap LLM proxy (Horus)";
 		wantedBy = [ "multi-user.target" ];
 		after = [ "network.target" ];
+		onFailure = [ "horus-alert@%n.service" ];
+		# don't die permanently after 5 quick failures (default burst limit) —
+		# alert instead, keep trying every 5s
+		unitConfig.StartLimitIntervalSec = 0;
 		serviceConfig = {
+			RestartSec = 5;
 			ExecStart = "${llama-swap}/bin/llama-swap --config ${swapConfig} --listen 127.0.0.1:8080";
 			DynamicUser = true;
 			# GPU access for the spawned llama-server (Vulkan/RADV)
@@ -79,6 +97,7 @@ in
 		description = "Warm the Horus LLM + prompt cache";
 		after = [ "llama-swap.service" "container@horus.service" "network-online.target" ];
 		wants = [ "network-online.target" ];
+		onFailure = [ "horus-alert@%n.service" ];
 		serviceConfig = {
 			Type = "oneshot";
 			ExecStart = "${horusWarmup}/bin/horus-warmup";
@@ -89,7 +108,13 @@ in
 
 	systemd.timers.horus-warmup = {
 		wantedBy = [ "timers.target" ];
-		# let the desktop settle first, then warm the model in the background
-		timerConfig.OnBootSec = "45s";
+		timerConfig = {
+			# let the desktop settle first, then warm the model in the background
+			OnBootSec = "45s";
+			# evening prime: voice usage clusters 19:45-23:05 and the idle TTL evicts
+			# the model over the afternoon — warm it before the evening starts.
+			# (the script self-gates: skips when loaded / paused / GPU-heavy app)
+			OnCalendar = "*-*-* 19:15:00";
+		};
 	};
 }

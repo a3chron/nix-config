@@ -22,17 +22,19 @@ tmpdir=$(mktemp -d /tmp/horus-voice.XXXXXX)
 #     spoken part ("ducked") and resumed when the round ends.
 music=http://127.0.0.1:8877
 round_start=$(date +%s)
-music_state() { curl -sf -m 1 "$music/status" 2>/dev/null | jq -r '.state // "stopped"'; }
+# -m 3, not 1: under a cold model prefill the daemon can take >1s to answer,
+# and a timed-out probe silently disabled ducking (Horus talked over the song)
+music_state() { curl -sf -m 3 "$music/status" 2>/dev/null | jq -r '.state // "stopped"'; }
 music_started_this_round() {
 	local at
-	at=$(curl -sf -m 1 "$music/status" 2>/dev/null \
+	at=$(curl -sf -m 3 "$music/status" 2>/dev/null \
 		| jq -r 'if .state != "stopped" then (.started_at // 0 | floor) else empty end')
 	[ -n "$at" ] && [ "$at" -ge "$round_start" ]
 }
 
 cleanup() {
 	if [ -f "$tmpdir/ducked" ]; then
-		curl -sf -m 1 -X POST "$music/resume" >/dev/null 2>&1
+		curl -sf -m 3 -X POST "$music/resume" >/dev/null 2>&1
 	fi
 	rm -rf "$tmpdir"
 }
@@ -75,7 +77,7 @@ speak() {
 	fi
 	# duck pre-existing music while Horus speaks (resumed in cleanup)
 	if [ ! -f "$tmpdir/ducked" ] && [ "$(music_state)" = "playing" ]; then
-		curl -sf -m 1 -X POST "$music/pause" >/dev/null 2>&1 && touch "$tmpdir/ducked"
+		curl -sf -m 3 -X POST "$music/pause" >/dev/null 2>&1 && touch "$tmpdir/ducked"
 	fi
 	local spoken
 	spoken=$(echo "$1" | sed -E \
@@ -89,14 +91,23 @@ speak() {
 		-e 's~https?://[^ )]+~ link ~g' \
 		-e 's/([0-9]+) *- *([0-9]+)/\1 to \2/g')
 	[ -z "${spoken// /}" ] && return 0
-	# Kokoro (am_michael); Piper stays as audible fallback if it ever fails
+	# Kokoro (am_michael); Piper stays as audible fallback if it ever fails.
+	# Delete the previous part first: a stale part.wav from an earlier part
+	# would otherwise be replayed and look like a successful synth.
+	rm -f "$tmpdir/part.wav"
 	local t0
 	t0=$(date +%s%3N)
-	if ! horus-tts --out "$tmpdir/part.wav" "$spoken" 2>/dev/null; then
+	if ! horus-tts --out "$tmpdir/part.wav" "$spoken" 2>&1; then
 		echo "kokoro failed, falling back to piper"
-		echo "$spoken" | piper --model "$piper_voice" --output_file "$tmpdir/part.wav" 2>/dev/null
+		if ! echo "$spoken" | piper --model "$piper_voice" --output_file "$tmpdir/part.wav" 2>&1; then
+			echo "piper failed too"
+		fi
 	fi
 	echo "synth: $(( $(date +%s%3N) - t0 ))ms"
+	if [ ! -s "$tmpdir/part.wav" ]; then
+		echo "TTS produced no audio — part NOT spoken"
+		return 1
+	fi
 	# First spoken part of the round: the A2DP link was just re-created by the
 	# HFP->A2DP profile switch and sat idle through STT+thinking, so BT drops the
 	# first ~300ms on resume — which is exactly Horus's opening word ("On it,").
@@ -107,12 +118,33 @@ speak() {
 		touch "$tmpdir/primed"
 		python3 -c 'import sys,wave; p=sys.argv[1]; r=wave.open(p,"rb"); pr=r.getparams(); fr=r.readframes(r.getnframes()); r.close(); lead=b"\x00"*(pr.sampwidth*pr.nchannels*int(pr.framerate*0.5)); w=wave.open(p,"wb"); w.setparams(pr); w.writeframes(lead+fr); w.close()' "$tmpdir/part.wav" 2>/dev/null || true
 	fi
-	play "$tmpdir/part.wav"
+	if ! play "$tmpdir/part.wav"; then
+		echo "audio playback failed (pw-play) — part NOT spoken"
+		return 1
+	fi
+	return 0
 }
 
+# harness internals must never be spoken: opencode's compaction summary and
+# its "Continue if you have next steps..." nudge arrive as normal text parts
+# (same filter as bridge/server.js dropReason — keep the two in sync)
+is_harness_internal() {
+	case "$1" in "Continue if you have next steps"*) return 0 ;; esac
+	local hits
+	hits=$(printf '%s' "$1" | grep -oE '## (Goal|Constraints & Preferences|Progress|Key Decisions|Next Steps|Critical Context|Relevant Files)' 2>/dev/null | wc -l)
+	[ "${hits:-0}" -ge 2 ]
+}
+
+# STT. Keep whisper's rc and stderr: a missing/corrupt model must sound and
+# log different from "you said nothing" — Kurt would otherwise debug his mic.
+if ! whisper-cli -m "$whisper_model" -f "$wav" --language en --no-timestamps \
+		>"$tmpdir/whisper.txt" 2>"$tmpdir/whisper.err"; then
+	echo "whisper FAILED: $(tr '\n' ' ' < "$tmpdir/whisper.err" | tail -c 300)"
+	play "$sounds/dialog-error.oga" # error tone, not the "didn't catch it" one
+	exit 1
+fi
 # strip whisper noise markers like [BLANK_AUDIO], (bell)
-text=$(whisper-cli -m "$whisper_model" -f "$wav" --language en --no-timestamps 2>/dev/null \
-	| sed -E 's/\[[^]]*\]//g; s/\([^)]*\)//g; s/^ +| +$//g' | tr '\n' ' ')
+text=$(sed -E 's/\[[^]]*\]//g; s/\([^)]*\)//g; s/^ +| +$//g' "$tmpdir/whisper.txt" | tr '\n' ' ')
 text=$(echo "$text" | sed -E 's/^ +| +$//g')
 echo "heard: $text"
 if [ -z "${text// /}" ]; then
@@ -132,7 +164,7 @@ a moment — web search, Linear, PDF, history, web fetch — BEGIN with one shor
 saying what you're doing (like 'On it, checking Linear.'), as its own text step before that tool \
 call, so Kurt isn't left in silence. For instant local actions (lights, sending a message, a \
 quick status) skip the preamble entirely — just do it and give the result. Answer SHORT and \
-conversational: 1-3 spoken sentences, absolutely no lists, no markdown, no issue-ID dumps. \
+conversational: 1-3 spoken sentences, absolutely no lists, no tables, no markdown, no issue-ID dumps. \
 Every word costs TTS synth time and Kurt's listening time. After an action, confirm in a few \
 words ('Done.', 'Lights are white.') — do NOT read back parameters, numbers or settings Kurt \
 did not ask about. Save the details for when the request was an actual question.]"
@@ -148,8 +180,10 @@ did not ask about. Save the details for when the request was an actual question.
 # A healthy run's last step finishes with reason "stop" — anything else
 # (tool-calls after a permission auto-reject, length) means it died owing
 # work; the marker files below let the post-loop check speak up about it.
+# OPENCODE_PERMISSION: unattended run — "ask" rules become "deny" so the model
+# gets a tool error it can explain instead of an auto-reject killing the run
 /run/wrappers/bin/sudo -n /run/current-system/sw/bin/machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
-	"cd /home/horus/work && err=\$(mktemp); timeout 600 opencode run --format json $sess_args $(printf '%q' "$prompt") 2>\"\$err\"; ec=\$?; sed 's/^/!/' \"\$err\" | tail -n 20; rm -f \"\$err\"; echo \"%%EXIT \$ec\"" \
+	"cd /home/horus/work && err=\$(mktemp); OPENCODE_PERMISSION=\$(cat .opencode/unattended-permission.json 2>/dev/null) timeout 600 opencode run --format json $sess_args $(printf '%q' "$prompt") 2>\"\$err\"; ec=\$?; sed 's/^/!/' \"\$err\" | tail -n 20; rm -f \"\$err\"; echo \"%%EXIT \$ec\"" \
 	| stdbuf -oL tr -d '\r' \
 	| jq --unbuffered -Rrc '
 		def clean: tostring | gsub("[\t\n\r]"; " ") | .[0:120];
@@ -188,16 +222,25 @@ did not ask about. Save the details for when the request was an actual question.
 			elif ($raw | startswith("!")) then (($raw[1:] | clean) as $e | if ($e | gsub(" "; "")) == "" then empty else "R " + $e end)
 			elif ($raw | gsub("[ \t]"; "")) == "" then empty
 			else "R " + ($raw | clean) end
-		)' 2>/dev/null \
+		)' \
 	| while IFS= read -r line; do
 		kind="${line:0:1}"
 		payload="${line:2}"
 		case "$kind" in
 		T)
 			[ -z "${payload// /}" ] && continue
+			if is_harness_internal "$payload"; then
+				echo "dropped harness internal: ${payload:0:80}"
+				continue
+			fi
 			echo "reply part: $payload"
-			touch "$tmpdir/spoke" "$tmpdir/answered"
-			speak "$payload"
+			# markers only AFTER audio actually played: a TTS/playback failure
+			# must not count as "answered" (Kurt would sit in verified silence)
+			if speak "$payload"; then
+				touch "$tmpdir/spoke" "$tmpdir/answered"
+			else
+				echo "part was not spoken (TTS/playback failure)"
+			fi
 			;;
 		U)
 			echo "tool: $payload"
@@ -205,6 +248,8 @@ did not ask about. Save the details for when the request was an actual question.
 			;;
 		V)
 			echo "tool failed: $payload"
+			# remember the tool name so a died round can say WHAT failed
+			printf '%s' "${payload%%$'\t'*}" > "$tmpdir/toolerr"
 			rm -f "$tmpdir/answered"
 			;;
 		F)
@@ -246,6 +291,11 @@ died=""
 [ -n "$finish" ] && [ "$finish" != "stop" ] && died=1
 [ -n "$ec" ] && [ "$ec" != "0" ] && died=1
 
+# name the failing step when we know it — a causeless "something broke" is
+# what let three silent deaths go undiagnosed in early August
+cause=""
+[ -f "$tmpdir/toolerr" ] && cause=" The $(cat "$tmpdir/toolerr") step failed."
+
 if music_started_this_round; then
 	# the song is the answer — a round with no (spoken) text is expected here,
 	# so neither fallback applies
@@ -254,8 +304,8 @@ elif [ ! -f "$tmpdir/spoke" ]; then
 	echo "no reply text received (finish=${finish:-none} exit=${ec:-none})"
 	# a stale/broken session id would keep failing every round — drop it
 	[ -n "$sess_args" ] && rm -f "$sess_file"
-	speak "Sorry, something went wrong — I didn't get an answer back."
+	speak "Sorry, something went wrong — I didn't get an answer back.${cause}" || play "$sounds/dialog-error.oga"
 elif [ -n "$died" ]; then
 	echo "round died mid-tools (finish=${finish:-none} exit=${ec:-none})"
-	speak "Sorry — something broke while I was working on that, and I didn't get a result back."
+	speak "Sorry — something broke while I was working on that, and I didn't get a result back.${cause}" || play "$sounds/dialog-error.oga"
 fi

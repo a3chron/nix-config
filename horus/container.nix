@@ -71,7 +71,6 @@ in
 
 			environment.systemPackages = [
 				unstable.opencode
-				unstable.qwen-code # fallback harness, tuned for Qwen models
 				pkgs.git
 				pkgs.ripgrep
 				pkgs.fd
@@ -122,13 +121,16 @@ in
 				serviceConfig = {
 					User = "horus";
 					WorkingDirectory = "/home/horus/work/bridge";
-					# append: has no rotation — trim on each start (container restarts
-					# on every pause/resume, so this actually fires). Runs as root ("+")
-					# because systemd created the file root-owned.
+					# append: has no rotation — rotate on each start (container restarts
+					# on every pause/resume, so this actually fires). Rotate to .1
+					# instead of truncating: a truncate-in-place destroyed the evidence
+					# exactly when Kurt restarted the container to investigate a failure.
+					# Runs as root ("+") because systemd created the file root-owned.
 					ExecStartPre = "+" + pkgs.writeShellScript "wa-bridge-logrotate" ''
 						f=/home/horus/work/bridge/bridge.log
 						if [ -f "$f" ] && [ "$(stat -c%s "$f")" -gt 1048576 ]; then
-							tail -n 1000 "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+							mv -f "$f" "$f.1"
+							tail -n 200 "$f.1" > "$f" || true
 						fi
 					'';
 					ExecStart = "${pkgs.nodejs_24}/bin/node /home/horus/work/bridge/server.js";
@@ -148,5 +150,6 @@ in
 	systemd.services."container@horus" = {
 		wants = [ "network-online.target" ];
 		after = [ "network-online.target" ];
+		onFailure = [ "horus-alert@%n.service" ];
 	};
 }

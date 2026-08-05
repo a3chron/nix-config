@@ -11,6 +11,10 @@
 		description = "Horus music playback daemon (mpv wrapper on 127.0.0.1:8877)";
 		wantedBy = [ "default.target" ];
 		path = [ pkgs.mpv ];
+		unitConfig = {
+			OnFailure = [ "horus-alert@%n.service" ];
+			StartLimitIntervalSec = 0;
+		};
 		serviceConfig = {
 			# deliberately impure repo path, same pattern as the voice scripts:
 			# tuning only needs a user-service restart, no rebuild

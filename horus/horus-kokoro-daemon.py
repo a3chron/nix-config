@@ -35,12 +35,12 @@ class Handler(socketserver.StreamRequestHandler):
             self.wfile.write(f"err: {e}\n".encode())
 
 
-def cleanup(*_):
+def cleanup(code=0):
     try:
         os.unlink(SOCK)
     except FileNotFoundError:
         pass
-    sys.exit(0)
+    sys.exit(code)
 
 
 def main():
@@ -50,14 +50,19 @@ def main():
         os.unlink(SOCK)  # drop a stale socket from an unclean exit
     except FileNotFoundError:
         pass
-    signal.signal(signal.SIGTERM, cleanup)
-    signal.signal(signal.SIGINT, cleanup)
+    signal.signal(signal.SIGTERM, lambda *_: cleanup(0))
+    signal.signal(signal.SIGINT, lambda *_: cleanup(0))
     server = socketserver.UnixStreamServer(SOCK, Handler)
     print(f"horus-kokoro daemon ready on {SOCK}", flush=True)
     try:
         server.serve_forever()
-    finally:
-        cleanup()
+    except Exception as e:
+        # exit NON-zero: the old `finally: cleanup()` exited 0 on a crash, so
+        # Restart=on-failure never fired and every reply silently paid the
+        # cold one-shot fallback until the next headphone reconnect
+        print(f"kokoro daemon crashed: {e}", file=sys.stderr, flush=True)
+        cleanup(1)
+    cleanup(0)
 
 
 main()

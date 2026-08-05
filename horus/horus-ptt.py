@@ -12,6 +12,8 @@ import sys
 import time
 import wave
 
+import urllib.request
+
 import evdev
 from evdev import InputDevice, UInput, ecodes
 
@@ -24,6 +26,11 @@ SOUNDS = "/run/current-system/sw/share/sounds/freedesktop/stereo"
 CHIME_START = f"{SOUNDS}/message-new-instant.oga"  # clear pop = "talk now"
 CHIME_STOP = f"{SOUNDS}/complete.oga"              # two-tone = "got it, thinking"
 CHIME_CANCEL = f"{SOUNDS}/dialog-error.oga"        # abort tone = "stopped"
+# the start pop is noticeably quieter than the stop/cancel sounds — boost it
+# so the "talk now" cue is as audible as the rest (pw-play linear volume)
+CHIME_START_VOLUME = 1.5
+WARMUP = "/run/current-system/sw/bin/horus-warmup"
+MUSIC_URL = "http://127.0.0.1:8877"
 
 RATE = 16000
 CHUNK_BYTES = RATE * 2 // 10        # 0.1s of s16 mono
@@ -41,9 +48,12 @@ def run(cmd, timeout=5):
         return None
 
 
-def chime(path, wait=True):
+def chime(path, wait=True, volume=None):
     try:
-        p = subprocess.Popen(["pw-play", path])
+        cmd = ["pw-play"]
+        if volume is not None:
+            cmd += ["--volume", str(volume)]
+        p = subprocess.Popen(cmd + [path])
         if wait:
             p.wait(timeout=4)
     except Exception as e:
@@ -112,6 +122,9 @@ def record_until_silence():
         print("no bluetooth mic source found", file=sys.stderr, flush=True)
         if prev and not was_hfp:
             run(["pactl", "set-card-profile", CARD, prev])
+        # audible feedback: without this Kurt talks into a mic that never went
+        # live and only silence tells him — the most common of the None paths
+        chime(CHIME_CANCEL, wait=True)
         return None
     time.sleep(0.4)
 
@@ -125,7 +138,7 @@ def record_until_silence():
     # parec buffered during the chime + stream warm-up so it pollutes neither the
     # recording nor the baseline calibration. Kurt speaks after the cue, into a
     # mic that is already live and flushed.
-    chime(CHIME_START, wait=True)
+    chime(CHIME_START, wait=True, volume=CHIME_START_VOLUME)
     os.set_blocking(rec.stdout.fileno(), False)
     try:
         while rec.stdout.read(CHUNK_BYTES):
@@ -167,6 +180,7 @@ def record_until_silence():
             if heard_speech and quiet_for >= SILENCE_HOLD_S and elapsed >= MIN_RECORD_S:
                 break
             if elapsed >= MAX_RECORD_S:
+                print(f"recording hit the {MAX_RECORD_S}s cap — question may be truncated", flush=True)
                 break
             if not heard_speech and elapsed >= 15.0:
                 break  # user pressed but never spoke
@@ -185,6 +199,7 @@ def record_until_silence():
 
     if not heard_speech:
         print("no speech detected", flush=True)
+        chime(f"{SOUNDS}/dialog-warning.oga", wait=True)  # "didn't hear you", distinct from the error tone
         return None
     with wave.open(WAV, "wb") as w:
         w.setnchannels(1)
@@ -203,17 +218,45 @@ def drain(dev):
         pass
 
 
+def dispatch_warmup():
+    """Fire-and-forget model warmup on the paddle press: the load overlaps the
+    5-20s Kurt spends speaking instead of starting after transcription. The
+    script self-gates (skips when loaded / paused / GPU-heavy app running)."""
+    try:
+        subprocess.Popen([WARMUP], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        print(f"warmup dispatch failed: {e}", file=sys.stderr, flush=True)
+
+
+def resume_music_if_paused():
+    """After a SIGKILL teardown the respond script's EXIT trap (which resumes
+    ducked music) may never have run — un-pause here. A song Kurt paused
+    manually *before* the round would also resume; rare, accepted."""
+    try:
+        with urllib.request.urlopen(f"{MUSIC_URL}/status", timeout=3) as r:
+            import json
+            if json.load(r).get("state") == "paused":
+                urllib.request.urlopen(
+                    urllib.request.Request(f"{MUSIC_URL}/resume", method="POST"), timeout=3
+                )
+                print("resumed music left paused by cancelled round", flush=True)
+    except Exception:
+        pass  # daemon down / nothing playing — nothing to resume
+
+
 def cancel_run():
-    # Stop the in-flight agent run INSIDE the container without touching the
-    # model or the container: kill the transient `opencode run` (the voice /
-    # WhatsApp one-shots) and leave the persistent server + interactive chat
-    # alone. Same passwordless machinectl path horus-voice-respond uses.
+    # Stop the in-flight VOICE run INSIDE the container without touching the
+    # model or the container. Scoped to voice: the prompt argv starts with
+    # "[Voice message", so a paddle-cancel no longer kills an unrelated
+    # in-flight WhatsApp answer / wake-up / briefing (they have their own
+    # prompts). `horus cancel` in cli.nix stays the kill-everything hammer.
     try:
         subprocess.run(
             [
                 "/run/wrappers/bin/sudo", "-n",
                 "/run/current-system/sw/bin/machinectl", "shell", "horus@horus",
-                "/run/current-system/sw/bin/bash", "-c", "pkill -f 'opencode run'",
+                "/run/current-system/sw/bin/bash", "-c",
+                "pkill -f 'opencode run.*\\[Voice message'",
             ],
             timeout=15,
             capture_output=True,
@@ -264,6 +307,7 @@ def respond(wav, dev):
             except ProcessLookupError:
                 pass
             proc.wait()
+            resume_music_if_paused()  # SIGKILL skipped the respond script's resume trap
         if cancelled:
             chime(CHIME_CANCEL, wait=True)
 
@@ -295,6 +339,8 @@ def main():
             if ev.type == ecodes.EV_KEY and ev.code == PTT_KEY:
                 print(f"ptt key event value={ev.value}", flush=True)
                 if ev.value == 1:
+                    # overlap the (possibly cold) model load with Kurt speaking
+                    dispatch_warmup()
                     wav = record_until_silence()
                     if wav:
                         print("responding...", flush=True)
@@ -305,8 +351,20 @@ def main():
             else:
                 ui.write_event(ev)  # pass through play/pause etc.
                 ui.syn()
+    except OSError as e:
+        # headphones disconnected while the grab was held — routine, not a
+        # crash (this was 18 of 23 tracebacks in the journal). Exit cleanly;
+        # horus-bt-watch restarts the service on the next connect.
+        print(f"input device gone ({e}) — exiting until next connect", flush=True)
     finally:
-        dev.ungrab()
+        try:
+            dev.ungrab()
+        except OSError:
+            pass  # device already gone
+        try:
+            ui.close()
+        except OSError:
+            pass
 
 
 main()

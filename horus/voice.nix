@@ -79,9 +79,15 @@ in
 		description = "Start/stop Horus voice when Nothing headphones (dis)connect";
 		wantedBy = [ "default.target" ];
 		environment.HORUS_HEADPHONE_MAC = headphoneMac;
+		# always: a clean-exit death (D-Bus mainloop returning) used to leave the
+		# paddle dead for the whole session; unlimited restarts, 5s apart
+		unitConfig = {
+			StartLimitIntervalSec = 0;
+			OnFailure = [ "horus-alert@%n.service" ];
+		};
 		serviceConfig = {
 			ExecStart = "${pythonEnv}/bin/python ${./horus-bt-watch.py}";
-			Restart = "on-failure";
+			Restart = "always";
 			RestartSec = 5;
 		};
 	};
@@ -91,8 +97,14 @@ in
 	systemd.user.services.horus-kokoro = {
 		description = "Warm Kokoro TTS daemon for Horus voice replies";
 		partOf = [ "horus-voice.service" ];
+		unitConfig = {
+			StartLimitIntervalSec = 0;
+			OnFailure = [ "horus-alert@%n.service" ];
+		};
 		serviceConfig = {
 			ExecStart = "${horusKokoroDaemon}/bin/horus-kokoro-daemon";
+			# the daemon now exits 1 on crash (it used to exit 0 and stay dead,
+			# silently degrading every reply to the cold one-shot fallback)
 			Restart = "on-failure";
 			RestartSec = 5;
 		};
@@ -103,6 +115,7 @@ in
 		# started/stopped by horus-bt-watch, never at login
 		wants = [ "horus-kokoro.service" ];  # pull the warm TTS daemon up with us
 		after = [ "horus-kokoro.service" ];
+		unitConfig.OnFailure = [ "horus-alert@%n.service" ];
 		path = [ pkgs.pipewire pkgs.pulseaudio voiceRespond "/run/wrappers" ];
 		environment.HORUS_HEADPHONE_MAC = headphoneMac;
 		serviceConfig = {

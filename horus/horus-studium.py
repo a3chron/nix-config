@@ -75,12 +75,15 @@ def start() -> dict:
     with _lock:
         if proc_alive() or dev_port_open():
             return status()
-        # own session -> we can SIGTERM the whole group (nix develop + pnpm + next)
+        # own session -> we can SIGTERM the whole group (nix develop + pnpm + next).
+        # stderr inherits to the unit journal: a failed TUMonline grade sync used
+        # to vanish into DEVNULL and was unknowable; stdout (dev-server spam)
+        # stays discarded.
         _proc = subprocess.Popen(
             ["nix", "develop", str(PROJECT_DIR), "-c", "pnpm", "dev"],
             cwd=PROJECT_DIR,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=None,
             start_new_session=True,
         )
         _started_at = time.time()
@@ -98,7 +101,19 @@ def stop() -> dict:
             try:
                 _proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                os.killpg(os.getpgid(_proc.pid), signal.SIGKILL)
+                try:
+                    os.killpg(os.getpgid(_proc.pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                try:
+                    _proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+        # don't forget a child that would not die: with _proc = None a stale
+        # server holding :3005 would be reported as healthy "running" forever
+        if proc_alive() and dev_port_open():
+            print(f"horus-studium: child {_proc.pid} survived SIGKILL — orphan holding :{DEV_PORT}", flush=True)
+            return {**status(), "state": "orphan", "error": f"dev server would not die, still holding :{DEV_PORT}"}
         _proc = None
         return status()
 

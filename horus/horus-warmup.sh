@@ -50,7 +50,15 @@ else
 	pre="/run/wrappers/bin/sudo -n "
 fi
 # shellcheck disable=SC2086
-$pre "$mc" shell horus@horus /run/current-system/sw/bin/bash -c \
+if $pre "$mc" shell horus@horus /run/current-system/sw/bin/bash -c \
 	"cd /home/horus/work && timeout 180 opencode run 'warmup — reply with just: ok'" \
-	>/dev/null 2>&1
-echo "horus-warmup: done"
+	>/dev/null 2>&1; then
+	echo "horus-warmup: done"
+else
+	ec=$?
+	# a broken opencode / failed model load / 180s timeout must not look
+	# identical to a successful warm — Kurt then eats a cold start and assumes
+	# warmup works. Non-zero exit also lets the unit report failed.
+	echo "horus-warmup: FAILED (exit $ec) — the next request will be a cold start" >&2
+	exit "$ec"
+fi

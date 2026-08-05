@@ -42,7 +42,19 @@ VOCAB = json.loads(
 
 def tokenize(backend, text):
     phonemes = backend.phonemize([text], strip=True)[0]
-    return [VOCAB[p] for p in phonemes if p in VOCAB][:MAX_TOKENS]
+    tokens = [VOCAB[p] for p in phonemes if p in VOCAB]
+    # dropped/truncated phonemes are audible as mangled words / a sentence
+    # trailing off — log it so `horus log` can show WHY it sounded wrong
+    dropped = sum(1 for p in phonemes if p not in VOCAB)
+    if dropped:
+        import sys
+        print(f"kokoro: {dropped} phoneme(s) not in VOCAB dropped (German/umlauts?): {text[:60]!r}",
+              file=sys.stderr, flush=True)
+    if len(tokens) > MAX_TOKENS:
+        import sys
+        print(f"kokoro: sentence truncated at {MAX_TOKENS} tokens ({len(tokens)} total): {text[:60]!r}",
+              file=sys.stderr, flush=True)
+    return tokens[:MAX_TOKENS]
 
 
 def trim_silence(audio, thresh=0.005, margin=int(0.05 * RATE)):

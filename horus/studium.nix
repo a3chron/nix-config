@@ -11,6 +11,10 @@
 		# nix + git for `nix develop` (flake in a git worktree); the dev shell
 		# provides node/pnpm, the sync script runs on the host's python3
 		path = [ pkgs.nix pkgs.git pkgs.python3 pkgs.coreutils pkgs.bash ];
+		unitConfig = {
+			OnFailure = [ "horus-alert@%n.service" ];
+			StartLimitIntervalSec = 0;
+		};
 		serviceConfig = {
 			# deliberately impure repo path, same pattern as horus-music:
 			# tuning only needs a user-service restart, no rebuild

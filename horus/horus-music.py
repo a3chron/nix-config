@@ -193,13 +193,21 @@ class Handler(BaseHTTPRequestHandler):
                         mpv_cmd("set_property", "volume", max(0, min(100, body["volume"])))
                     mpv_cmd("loadfile", str(song))
                     mpv_cmd("set_property", "pause", False)
-                    _started_at = time.time()
-                    # brief wait until mpv has probed the file, so the status
-                    # we return already carries duration/position
-                    for _ in range(10):
-                        if get_prop("duration") is not None:
+                    # only claim "playing" once mpv has actually probed the file:
+                    # loadfile is async, and setting _started_at on faith made the
+                    # voice pipeline suppress TTS ("the song is the answer") for a
+                    # song that never produced sound (corrupt file, dead sink)
+                    started = False
+                    for _ in range(20):
+                        if get_prop("duration") is not None and get_prop("idle-active") is False:
+                            started = True
                             break
                         time.sleep(0.1)
+                    if not started:
+                        raise RuntimeError(
+                            f"mpv did not start playing {song.name} — corrupt file or audio problem"
+                        )
+                    _started_at = time.time()
                 elif self.path == "/pause":
                     mpv_alive() and mpv_cmd("set_property", "pause", True)
                 elif self.path == "/resume":

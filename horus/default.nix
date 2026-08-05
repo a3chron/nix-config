@@ -12,5 +12,7 @@
 		./studium.nix
 		./briefing.nix
 		./backup.nix
+		./wakeup.nix
+		./alert.nix
 	];
 }

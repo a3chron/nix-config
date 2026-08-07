@@ -14,6 +14,12 @@ let
 				if ! systemctl is-active -q container@horus.service; then
 					sudo systemctl start container@horus.service
 				fi
+				# pause stops horus-voice (and with it Kokoro). Don't start it
+				# directly — whether voice SHOULD run depends on the headphones
+				# being connected, and horus-bt-watch already owns that decision:
+				# its startup probe reads the current BlueZ Connected state and
+				# starts or stops voice to match. Restarting it re-runs that probe.
+				systemctl --user restart horus-bt-watch.service 2>/dev/null || true
 			}
 
 			case "$cmd" in
@@ -72,7 +78,15 @@ let
 			pause)
 				sudo systemctl stop container@horus.service
 				sudo systemctl stop llama-swap.service
-				echo "horus: paused — container stopped, model unloaded, VRAM freed"
+				# Kokoro holds ~600MB of ONNX+espeak resident while the headphones
+				# are connected, and pause used to leave it there — the one thing
+				# pause visibly failed to free, right when Kurt wants the RAM for a
+				# game. horus-kokoro is PartOf horus-voice, so it follows this stop.
+				# (Voice is useless while paused anyway: the pipeline needs the
+				# container to answer.) resume restarts horus-bt-watch, whose initial
+				# connect probe brings voice back iff the headphones are still on.
+				systemctl --user stop horus-voice.service 2>/dev/null || true
+				echo "horus: paused — container stopped, model unloaded, VRAM freed, voice off"
 				;;
 			cancel|stop)
 				# Stop the current background agent run (voice / WhatsApp one-shots)

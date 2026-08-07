@@ -7,6 +7,8 @@
 # rescheduled BEFORE firing (a drain crash can't double-fire them); one-shots
 # are marked done before firing (no double-send) — fire() itself reports a
 # failed run to Kurt via WhatsApp, so a failure is never silent either way.
+# That last ordering means firing into a stopped container CONSUMES a one-shot,
+# so a tick is deferred wholesale while the stack is paused (see stack_paused).
 import fcntl
 import json
 import os
@@ -21,6 +23,7 @@ LOCK = f"{HOME}/horus/memory/reminders/.drain.lock"
 CONTACTS = f"{HOME}/horus/memory/whatsapp-contacts.json"
 SUDO = "/run/wrappers/bin/sudo"
 MC = "/run/current-system/sw/bin/machinectl"
+SYSTEMCTL = "/run/current-system/sw/bin/systemctl"
 TTS = "/run/current-system/sw/bin/horus-tts"
 PWPLAY = "/run/current-system/sw/bin/pw-play"
 BRIDGE = "http://127.0.0.1:8765"
@@ -254,6 +257,23 @@ def fire(job):
         log(f"{job['id']}: delivery failed on all channels")
 
 
+def stack_paused():
+    """Which half of the stack `horus pause` took down, if any.
+
+    Firing while paused doesn't just fail — it CONSUMES the job. One-shots are
+    marked done before fire() (see the module docstring: that ordering exists so
+    a crash can't double-send), so a reminder that comes due during a pause is
+    struck off the queue, fails to reach a stopped container, and is gone. The
+    WhatsApp "wake-up failed" notice tells Kurt, but the reminder itself is not
+    retried. Deferring the whole tick keeps the job due instead, so it fires on
+    resume. Repeating jobs already handle long gaps via STALE_REPEAT_H.
+    """
+    for unit in ("container@horus.service", "llama-swap.service"):
+        if subprocess.run([SYSTEMCTL, "is-active", "--quiet", unit]).returncode != 0:
+            return unit
+    return None
+
+
 def main():
     os.makedirs(os.path.dirname(QUEUE), exist_ok=True)
     if not os.path.exists(QUEUE):
@@ -269,6 +289,13 @@ def main():
         jobs = replay(lines)
         now = now_str()
         due = [j for j in jobs.values() if j["next"] <= now]
+        # checked only when something is actually due — this runs every minute,
+        # and an unconditional check would spam the journal through every pause
+        if due:
+            down = stack_paused()
+            if down:
+                log(f"{len(due)} job(s) due but the stack is paused ({down} inactive) — deferring, they stay queued")
+                return
         catchup = []
         for job in due:
             overdue_h = (datetime.now() - datetime.strptime(job["next"], "%Y-%m-%d %H:%M")).total_seconds() / 3600

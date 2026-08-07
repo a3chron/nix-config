@@ -40,6 +40,10 @@ in
 	# — same WhatsApp ping plus a desktop notification in the session
 	systemd.user.services."horus-alert@" = {
 		description = "Notify Kurt that user unit %i failed";
+		# backstop: the alert itself must never fire from another user's session
+		# (gdm-greeter's manager runs these units too and produced 16 bogus
+		# notifications on 2026-08-07 — root cause fixed in music.nix et al)
+		unitConfig.ConditionUser = "a3chron";
 		serviceConfig = {
 			Type = "oneshot";
 			ExecStart = pkgs.writeShellScript "horus-alert-user" ''

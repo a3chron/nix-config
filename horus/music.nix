@@ -14,6 +14,15 @@
 		unitConfig = {
 			OnFailure = [ "horus-alert@%n.service" ];
 			StartLimitIntervalSec = 0;
+			# NixOS installs systemd.user units into /etc/systemd/user, so EVERY
+			# user session starts them — including gdm-greeter's, which can't read
+			# /home/a3chron (0700) and so dies on the impure ExecStart path above.
+			# With Restart=on-failure + StartLimitIntervalSec=0 that became an
+			# endless restart loop, each iteration firing OnFailure: 16 "horus-music
+			# failed" notifications at boot on 2026-08-07, all of them bogus — the
+			# real session started the daemon fine seconds later. A failed condition
+			# SKIPS the unit (not a failure), so OnFailure stays silent elsewhere.
+			ConditionUser = "a3chron";
 		};
 		serviceConfig = {
 			# deliberately impure repo path, same pattern as the voice scripts:

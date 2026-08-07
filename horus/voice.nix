@@ -84,6 +84,9 @@ in
 		unitConfig = {
 			StartLimitIntervalSec = 0;
 			OnFailure = [ "horus-alert@%n.service" ];
+			# only Kurt's session — it survived the greeter (store-path ExecStart,
+			# unlike music/studium) but has no business running there (see music.nix)
+			ConditionUser = "a3chron";
 		};
 		serviceConfig = {
 			ExecStart = "${pythonEnv}/bin/python ${./horus-bt-watch.py}";
@@ -100,6 +103,7 @@ in
 		unitConfig = {
 			StartLimitIntervalSec = 0;
 			OnFailure = [ "horus-alert@%n.service" ];
+			ConditionUser = "a3chron"; # see music.nix
 		};
 		serviceConfig = {
 			ExecStart = "${horusKokoroDaemon}/bin/horus-kokoro-daemon";
@@ -115,7 +119,10 @@ in
 		# started/stopped by horus-bt-watch, never at login
 		wants = [ "horus-kokoro.service" ];  # pull the warm TTS daemon up with us
 		after = [ "horus-kokoro.service" ];
-		unitConfig.OnFailure = [ "horus-alert@%n.service" ];
+		unitConfig = {
+			OnFailure = [ "horus-alert@%n.service" ];
+			ConditionUser = "a3chron"; # see music.nix
+		};
 		path = [ pkgs.pipewire pkgs.pulseaudio voiceRespond "/run/wrappers" ];
 		environment.HORUS_HEADPHONE_MAC = headphoneMac;
 		serviceConfig = {

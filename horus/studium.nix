@@ -14,6 +14,9 @@
 		unitConfig = {
 			OnFailure = [ "horus-alert@%n.service" ];
 			StartLimitIntervalSec = 0;
+			# gdm-greeter's session can't read the impure /home path either — same
+			# bogus restart-loop + alert storm as horus-music (see music.nix)
+			ConditionUser = "a3chron";
 		};
 		serviceConfig = {
 			# deliberately impure repo path, same pattern as horus-music:

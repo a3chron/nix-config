@@ -14,5 +14,6 @@
 		./backup.nix
 		./wakeup.nix
 		./alert.nix
+		./wa-watch.nix
 	];
 }

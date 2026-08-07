@@ -9,7 +9,10 @@
 {
 	systemd.user.services.horus-wakeup-drain = {
 		description = "Fire due Horus self-scheduled wake-ups";
-		unitConfig.OnFailure = [ "horus-alert@%n.service" ];
+		unitConfig = {
+			OnFailure = [ "horus-alert@%n.service" ];
+			ConditionUser = "a3chron"; # see music.nix
+		};
 		serviceConfig = {
 			Type = "oneshot";
 			ExecStart = "${pkgs.python3}/bin/python /home/a3chron/nixos-config/horus/horus-wakeup-drain.py";

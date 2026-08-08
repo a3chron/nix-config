@@ -105,6 +105,48 @@ in
 				hostPath = "/home/a3chron/Projects/kaeru";
 				isReadOnly = false;
 			};
+			# Same hook-escape vector as ~/horus above: these are RW mounts of repos
+			# Kurt commits from the HOST, so a planted .git/hooks/pre-commit (or a
+			# core.hooksPath / filter.*.clean / diff.*.textconv entry in .git/config)
+			# would execute as Kurt, outside the container and outside the netless
+			# bash shim, with his ssh keys and full network. Git never tracks .git, so
+			# it wouldn't even show up in a diff. Freeze only those two surfaces —
+			# the working trees stay writable, which is the whole point of the mounts.
+			# Neither repo uses hooks or husky today, so this costs nothing now; if
+			# husky is ever added, `pnpm install` INSIDE the container would fail to
+			# write hooks (on the host it is unaffected — the RO bind is container-only).
+			"/home/horus/projects/portfolio/.git/hooks" = {
+				hostPath = "/home/a3chron/Projects/portfolio/.git/hooks";
+				isReadOnly = true;
+			};
+			"/home/horus/projects/portfolio/.git/config" = {
+				hostPath = "/home/a3chron/Projects/portfolio/.git/config";
+				isReadOnly = true;
+			};
+			"/home/horus/projects/kaeru/kaeru-kitchen/.git/hooks" = {
+				hostPath = "/home/a3chron/Projects/kaeru/kaeru-kitchen/.git/hooks";
+				isReadOnly = true;
+			};
+			"/home/horus/projects/kaeru/kaeru-kitchen/.git/config" = {
+				hostPath = "/home/a3chron/Projects/kaeru/kaeru-kitchen/.git/config";
+				isReadOnly = true;
+			};
+			"/home/horus/projects/kaeru/kaeru-kitchen-hub/.git/hooks" = {
+				hostPath = "/home/a3chron/Projects/kaeru/kaeru-kitchen-hub/.git/hooks";
+				isReadOnly = true;
+			};
+			"/home/horus/projects/kaeru/kaeru-kitchen-hub/.git/config" = {
+				hostPath = "/home/a3chron/Projects/kaeru/kaeru-kitchen-hub/.git/config";
+				isReadOnly = true;
+			};
+			"/home/horus/projects/kaeru/kaeru-kitchen-premium/.git/hooks" = {
+				hostPath = "/home/a3chron/Projects/kaeru/kaeru-kitchen-premium/.git/hooks";
+				isReadOnly = true;
+			};
+			"/home/horus/projects/kaeru/kaeru-kitchen-premium/.git/config" = {
+				hostPath = "/home/a3chron/Projects/kaeru/kaeru-kitchen-premium/.git/config";
+				isReadOnly = true;
+			};
 			# stellar: read-only — a public repo Kurt wants Horus able to read and
 			# analyse (lint/type-check work; edits/formatting fail on the RO mount)
 			"/home/horus/projects/stellar" = {

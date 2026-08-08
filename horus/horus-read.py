@@ -70,20 +70,52 @@ DEFAULT_VOLUME = 85
 #    time — and horus-kokoro-client.py sets a 30s socket timeout. A chunk must
 #    synthesize well inside that, both to avoid the timeout and because a voice
 #    reply queued behind a chunk waits for it.
-# 3. Measured on this CPU (2026-08-08, warm daemon, speed 1.15):
-#       350 chars -> 2.37s synth / 21.3s audio   (9.0x realtime)
-#       900 chars -> 6.27s synth / 55.5s audio   (8.8x realtime)
-#      1400 chars -> 9.14s synth / 86.8s audio   (9.5x realtime)
-#    So 900 chars costs ~6s (safe under 30s) and synthesis outruns playback
-#    ~9:1 — chunk N+1 is always ready long before chunk N finishes playing.
+# 3. MEASURED realtime factor on this CPU (2026-08-08, speed 1.15) — the
+#    number every chunking decision depends on, and which nobody had before:
+#                    warm daemon              cold one-shot
+#       350 chars    2.39s -> 21.3s  8.9x     2.89s -> 21.3s  7.4x
+#       900 chars    5.98s -> 55.5s  9.3x     6.38s -> 55.5s  8.7x
+#      1400 chars    9.21s -> 86.8s  9.4x     9.81s -> 86.8s  8.8x
+#    ~= 61.6 ms of audio per character. So 900 chars costs ~6s (safe under the
+#    client's 30s timeout) and synthesis outruns playback ~9:1 — chunk N+1 is
+#    ready long before chunk N finishes playing. Observed in a real read:
+#    26/26 chunks synthesized while playback was still on chunk 2.
+#    Note the cold one-shot is only ~0.5s slower per call, NOT the 10-20s the
+#    original plan assumed — the model load is cheap here. The tts-down pause
+#    is therefore about correctness (don't blast an article at the speakers
+#    when the headphones vanish), not about avoiding a stall.
 CHUNK_CHARS = 900
 CHUNK_CHARS_FIRST = 350  # first audio in ~2.4s instead of ~6.3s
-MAX_SENTENCE_CHARS = 320
-SENTENCE_SPLIT_AT = 300
+# Derived from a MEASURED phoneme-token density, not guessed. Worst ratio seen
+# over the long sentences of the Wikipedia speech-synthesis article (which is
+# unusually dense — IPA, citations, abbreviations) was 1.40 tokens/char
+# (780 chars -> 1095 tokens); typical English prose is ~1.15. At 300 chars the
+# worst case is ~420 tokens against MAX_TOKENS = 510, an 18% margin. Going
+# higher risks silent truncation; going lower splits more sentences, and every
+# split puts the engine's 0.15s end-of-sentence pause in the MIDDLE of a
+# sentence, which is audible.
+MAX_SENTENCE_CHARS = 300
+SENTENCE_SPLIT_AT = 280
 SEC_PER_CHAR = 0.0616  # measured above; used only for the not-yet-synthesized tail
 PREBUFFER = 2
 SILENCE_LEAD_S = 0.5  # see horus-voice-respond.sh:118-124 — BT eats the first ~300ms
-SILENCE_PARA_S = 0.35
+# NO extra silence at the end of a chunk. This used to be 0.35s "for prosody"
+# and it was the stutter Kurt reported on 2026-08-08: "30s to a minute of
+# smooth speech, then it just paused for a sec or two, then continued".
+#
+# The engine already ends every sentence with 0.15s (horus_kokoro_core.py:103)
+# plus trim_silence's 0.05s margin, so a chunk boundary landed on 0.55s of dead
+# air while a paragraph break INSIDE a chunk got only 0.15s. Chunks are 40-55s
+# long, so the listener heard an unexplained pause at exactly that cadence —
+# i.e. the chunking itself became audible, which is the one thing it must not
+# be. Boundaries must be acoustically indistinguishable from any other sentence
+# break, so we add nothing and let the engine's own spacing carry through.
+#
+# Worth knowing: a mechanical gap meter CANNOT see this — silence is still
+# audio advancing at wall-clock rate. Measured playback gaps were 0.00s while
+# this bug was fully present. Diagnose boundary complaints by inspecting the
+# WAVs, not by timing the player.
+SILENCE_PARA_S = 0.0
 
 HEAD_CHARS = 1200
 TAIL_CHARS = 800
@@ -523,9 +555,21 @@ def apply_trims(raw, trims):
 
 # ================================ chunking ==================================
 
+# the punctuation horus_kokoro_core.py:91 splits sentences on, allowing for a
+# trailing quote/bracket
+ENDS_SENTENCE = re.compile(r"[.!?;:][\"'’”)\]]*$")
+
+
 def hard_split(sentence):
     """Kokoro truncates >510 tokens per inference SILENTLY. Split anything long
-    enough to risk it, preferring a comma/dash/space boundary."""
+    enough to risk it, preferring a comma/dash/space boundary.
+
+    Returns [(piece, is_fragment)]. `is_fragment` marks a piece that does NOT
+    carry the sentence's terminating punctuation, i.e. one we created by
+    cutting a sentence in half. Only those force a chunk break — an ordinary
+    unpunctuated line such as a heading does not, so headings still ride along
+    with the paragraph that follows them instead of each becoming its own
+    3-character chunk."""
     out = []
     s = sentence
     while len(s) > MAX_SENTENCE_CHARS:
@@ -537,10 +581,10 @@ def hard_split(sentence):
             cut = SENTENCE_SPLIT_AT
         else:
             cut += 1
-        out.append(s[:cut].strip())
+        out.append((s[:cut].strip(), True))
         s = s[cut:].strip()
     if s:
-        out.append(s)
+        out.append((s, False))
     return out
 
 
@@ -559,18 +603,47 @@ def build_chunks(text):
         pieces = []
         for s in sents:
             pieces.extend(hard_split(s.strip()))
-        for i, piece in enumerate(pieces):
-            units.append((piece, i == len(pieces) - 1))
+        for i, (piece, is_fragment) in enumerate(pieces):
+            units.append((piece, i == len(pieces) - 1, is_fragment))
 
     chunks = []
     cur, cur_len = [], 0
+    run = 0  # chars since the last sentence-ending punctuation IN THIS CHUNK
     target = CHUNK_CHARS_FIRST
-    for piece, ends_para in units:
+    for piece, ends_para, is_fragment in units:
+        plen = len(piece) + 1
+        # Flush BEFORE appending when this piece would extend an unterminated
+        # run past the cap. Checking afterwards is too late — the oversized run
+        # is already in the chunk by then — and resetting the counter on the
+        # piece that carries the punctuation without counting that piece was
+        # the specific mistake that let a 523-char "sentence" reach the engine.
+        # What the engine sees as one sentence is everything since the previous
+        # punctuation UP TO AND INCLUDING the punctuated piece, so the cap has
+        # to be tested against run + this piece, before committing to it.
+        if cur and run > 0 and run + plen > MAX_SENTENCE_CHARS:
+            chunks.append((" ".join(cur), False))
+            cur, cur_len, run = [], 0, 0
+            target = CHUNK_CHARS
         cur.append(piece)
-        cur_len += len(piece) + 1
-        if cur_len >= target or (ends_para and cur_len >= target * 0.7):
+        cur_len += plen
+        run = 0 if ENDS_SENTENCE.search(piece) else run + plen
+        # The engine re-splits our chunk text on sentence punctuation
+        # (horus_kokoro_core.py:91), so anything we join with a plain space and
+        # that carries no such punctuation is handed to it as ONE sentence.
+        # Two ways that can exceed MAX_TOKENS, both of which we must prevent
+        # because the engine's response is to truncate SILENTLY (and, until the
+        # clamp fix in horus_kokoro_core.py, to crash — four missing passages
+        # in one Wikipedia article):
+        #   - a fragment we created by cutting a long sentence, which would be
+        #     glued straight back onto its own continuation, and
+        #   - an accumulated run of unpunctuated lines (headings, list items).
+        # Ending the chunk makes the run the chunk's last sentence, bounded by
+        # MAX_SENTENCE_CHARS. Extra boundaries used to cost 0.55s of dead air
+        # each; since SILENCE_PARA_S went to 0 they are inaudible, so this is
+        # free.
+        if is_fragment or cur_len >= target or (ends_para and cur_len >= target * 0.7):
             chunks.append((" ".join(cur), ends_para))
-            cur, cur_len = [], 0
+            cur, cur_len, run = [], 0, 0
             target = CHUNK_CHARS
     if cur:
         chunks.append((" ".join(cur), True))
@@ -593,7 +666,16 @@ def ensure_mpv():
     except FileNotFoundError:
         pass
     _mpv = subprocess.Popen(
-        ["mpv", "--idle=yes", "--no-video", "--no-terminal", "--gapless-audio=yes",
+        # --gapless-audio=yes keeps the AUDIO DEVICE open across playlist
+        # entries (all chunks share one format, 24kHz/mono/s16, so this is
+        # safe) and --prefetch-playlist=yes opens the next chunk before the
+        # current one ends. Both exist to keep chunk boundaries inaudible.
+        # Measured on the speakers: 0 stalls in 150s across 3 boundaries. The
+        # Bluetooth path could not be measured (headphones disconnected) — and
+        # that is exactly where a dropped device costs 1-2s to re-establish,
+        # which is why the device is kept open rather than merely prefetched.
+        ["mpv", "--idle=yes", "--no-video", "--no-terminal",
+         "--gapless-audio=yes", "--prefetch-playlist=yes",
          f"--volume={DEFAULT_VOLUME}", f"--input-ipc-server={MPV_SOCK}"],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
@@ -791,6 +873,8 @@ def synth_chunk(job, i):
     if b"not in VOCAB" in (r.stderr or b""):
         with _lock:
             job.vocab_warned += 1
+    # only chunk 0 is padded, and only at the FRONT (the BT ramp-up). Never pad
+    # the tail — see SILENCE_PARA_S.
     pad_wav(out, lead=SILENCE_LEAD_S if i == 0 else 0.0,
             tail=SILENCE_PARA_S if ends_para else 0.0)
     return True

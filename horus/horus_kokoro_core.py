@@ -94,9 +94,19 @@ class Engine:
             tokens = tokenize(self.backend, sentence)
             if not tokens:
                 continue
+            # clamp: tokenize() truncates to exactly MAX_TOKENS (510) but
+            # `styles` has 510 rows, i.e. valid indices 0..509 — so a sentence
+            # that actually reached the cap raised
+            #   IndexError: index 510 is out of bounds for axis 0 with size 510
+            # and the whole synth request failed. Latent since the engine was
+            # written: it needs a single sentence long enough to hit the cap,
+            # which voice replies never produced but a Wikipedia paragraph does
+            # (found 2026-08-08 by read-aloud, four missing passages in one
+            # article). Truncated audio beats no audio.
+            style_row = styles[min(len(tokens), len(styles) - 1)]
             audio = self.sess.run(None, {
                 "tokens": np.array([[0, *tokens, 0]], dtype=np.int64),
-                "style": styles[len(tokens)].astype(np.float32),
+                "style": style_row.astype(np.float32),
                 "speed": np.array([speed], dtype=np.float32),
             })[0].squeeze()
             parts.append(trim_silence(audio))

@@ -13,20 +13,18 @@ import fcntl
 import json
 import os
 import subprocess
-import tempfile
-import urllib.request
 from datetime import datetime, timedelta
+
+# shared with horus-morning.py; also holds the "un-initiated audio goes to the
+# DEFAULT sink" decision and the markdown->speech stripping
+from horus_deliver import send_whatsapp, short_form, speak
 
 HOME = "/home/a3chron"
 QUEUE = f"{HOME}/horus/memory/reminders/queue.jsonl"
 LOCK = f"{HOME}/horus/memory/reminders/.drain.lock"
-CONTACTS = f"{HOME}/horus/memory/whatsapp-contacts.json"
 SUDO = "/run/wrappers/bin/sudo"
 MC = "/run/current-system/sw/bin/machinectl"
 SYSTEMCTL = "/run/current-system/sw/bin/systemctl"
-TTS = "/run/current-system/sw/bin/horus-tts"
-PWPLAY = "/run/current-system/sw/bin/pw-play"
-BRIDGE = "http://127.0.0.1:8765"
 RUN_TIMEOUT = 300
 STALE_REPEAT_H = 12  # repeating occurrences older than this go to the catch-up summary, not fired individually
 COMPACT_AT = 200  # lines
@@ -63,76 +61,6 @@ def replay(lines):
 def append(entry):
     with open(QUEUE, "a") as f:
         f.write(json.dumps(entry) + "\n")
-
-
-def kurt_jid():
-    try:
-        with open(CONTACTS) as f:
-            contacts = json.load(f)
-        for name, jid in contacts.items():
-            if name.lower().startswith("kurt"):
-                return str(jid)
-    except Exception as e:
-        log(f"contacts unreadable: {e}")
-    return None
-
-
-def send_whatsapp(text):
-    jid = kurt_jid()
-    if not jid:
-        log("no kurt JID — cannot deliver via whatsapp")
-        return False
-    try:
-        req = urllib.request.Request(
-            f"{BRIDGE}/send",
-            data=json.dumps({"to": jid, "text": text}).encode(),
-            headers={"content-type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=70) as r:
-            return r.status == 200
-    except Exception as e:
-        log(f"whatsapp send failed: {e}")
-        return False
-
-
-def music_call(path, method="GET"):
-    try:
-        req = urllib.request.Request(f"http://127.0.0.1:8877{path}", method=method)
-        with urllib.request.urlopen(req, timeout=3) as r:
-            return json.load(r)
-    except Exception:
-        return None
-
-
-def speak(text):
-    wav = None
-    ducked = False
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
-            wav = tf.name
-        if subprocess.run([TTS, "--out", wav, text], capture_output=True, timeout=60).returncode != 0:
-            return False
-        if os.path.getsize(wav) == 0:
-            return False
-        # duck horus-music while speaking (same idea as voice rounds) — a
-        # question mixed under a running song is easy to miss entirely
-        st = music_call("/status")
-        if st and st.get("state") == "playing":
-            ducked = music_call("/pause", "POST") is not None
-        ok = subprocess.run([PWPLAY, wav], capture_output=True, timeout=120).returncode == 0
-        return ok
-    except Exception as e:
-        log(f"speak failed: {e}")
-        return False
-    finally:
-        if ducked:
-            music_call("/resume", "POST")
-        if wav:
-            try:
-                os.unlink(wav)
-            except OSError:
-                pass
 
 
 def run_agent(job):

@@ -141,6 +141,21 @@ let
 						printf 'ALERT:      user %s FAILED (journalctl --user -u %s)\n' "$u" "$u"
 					fi
 				done
+				# the netless bash shim (opencode.json "shell") fails OPEN: if the
+				# binary is gone (rollback to an older generation, rename, typo)
+				# opencode silently falls back to the default shell and the agent's
+				# bash tool has full network again — with no error anywhere. So
+				# check it here rather than discovering it after an incident.
+				# echo-sentinel, not exit code: machinectl swallows those (see cancel)
+				if systemctl is-active -q container@horus.service; then
+					shim=$(sudo machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
+						'test -x /run/current-system/sw/bin/horus-netless-shell && echo OK || echo MISSING' \
+						2>/dev/null | tr -d '\r\n')
+					case "$shim" in
+						*OK*) ;;
+						*) printf 'ALERT:      netless bash shim missing — the bash tool has full network again\n' ;;
+					esac
+				fi
 				printf 'backup:     last %s\n' "$(cat /home/a3chron/horus/memory/.last-backup 2>/dev/null || echo 'no stamp yet (runs daily)')"
 				;;
 			log)

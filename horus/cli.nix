@@ -136,7 +136,7 @@ let
 						printf 'ALERT:      %s FAILED (journalctl -u %s)\n' "$u" "$u"
 					fi
 				done
-				for u in horus-bt-watch horus-kokoro horus-voice horus-music horus-studium horus-wakeup-drain.service horus-wakeup-drain.timer; do
+				for u in horus-bt-watch horus-kokoro horus-voice horus-music horus-studium horus-wakeup-drain.service horus-wakeup-drain.timer horus-morning.service horus-morning.timer; do
 					if systemctl --user is-failed -q "$u" 2>/dev/null; then
 						printf 'ALERT:      user %s FAILED (journalctl --user -u %s)\n' "$u" "$u"
 					fi
@@ -157,6 +157,7 @@ let
 					esac
 				fi
 				printf 'backup:     last %s\n' "$(cat /home/a3chron/horus/memory/.last-backup 2>/dev/null || echo 'no stamp yet (runs daily)')"
+				printf 'morning:    last %s\n' "$(cat /home/a3chron/horus/memory/.last-morning-status 2>/dev/null || echo 'not yet today')"
 				;;
 			log)
 				# live voice-pipeline view: what whisper heard, what horus replied.

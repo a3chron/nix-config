@@ -13,6 +13,7 @@
 		./briefing.nix
 		./backup.nix
 		./wakeup.nix
+		./morning.nix
 		./alert.nix
 		./wa-watch.nix
 	];

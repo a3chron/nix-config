@@ -136,7 +136,7 @@ let
 						printf 'ALERT:      %s FAILED (journalctl -u %s)\n' "$u" "$u"
 					fi
 				done
-				for u in horus-bt-watch horus-kokoro horus-voice horus-music horus-studium horus-wakeup-drain.service horus-wakeup-drain.timer horus-morning.service horus-morning.timer; do
+				for u in horus-bt-watch horus-kokoro horus-voice horus-music horus-read playerctld horus-studium horus-wakeup-drain.service horus-wakeup-drain.timer horus-morning.service horus-morning.timer; do
 					if systemctl --user is-failed -q "$u" 2>/dev/null; then
 						printf 'ALERT:      user %s FAILED (journalctl --user -u %s)\n' "$u" "$u"
 					fi

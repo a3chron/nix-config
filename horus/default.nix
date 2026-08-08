@@ -9,6 +9,7 @@
 		./cli.nix
 		./voice.nix
 		./music.nix
+		./read.nix
 		./studium.nix
 		./briefing.nix
 		./backup.nix

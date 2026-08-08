@@ -11,6 +11,10 @@ set -uo pipefail
 sounds=/run/current-system/sw/share/sounds/freedesktop/stereo
 whisper_model=/var/lib/llm/models/ggml-large-v3-turbo.bin
 piper_voice=/var/lib/llm/models/piper-en_US-lessac-medium.onnx
+# Kokoro speaking rate. 1.0 is the model default and reads a touch slow; tune
+# by ear (1.1 / 1.15 / 1.25) — this file is impure, so a change takes effect on
+# the next voice round with no rebuild and no restart.
+tts_speed=1.15
 wav="$1"
 tmpdir=$(mktemp -d /tmp/horus-voice.XXXXXX)
 
@@ -56,7 +60,10 @@ fi
 
 # play to the headphones explicitly: right after the HFP->A2DP flip the
 # *default* sink can briefly point elsewhere (e.g. easyeffects) and the
-# reply would go there silently
+# reply would go there silently.
+# This explicit targeting is deliberate and is the ONE exception to the
+# "un-initiated audio goes to the default sink" rule — a voice round means the
+# headphones are on by definition. See horus_deliver.py's header.
 play() {
 	local sink
 	# grep/cut, not awk: awk is not on the voice unit's PATH
@@ -97,7 +104,7 @@ speak() {
 	rm -f "$tmpdir/part.wav"
 	local t0
 	t0=$(date +%s%3N)
-	if ! horus-tts --out "$tmpdir/part.wav" "$spoken" 2>&1; then
+	if ! horus-tts --speed "$tts_speed" --out "$tmpdir/part.wav" "$spoken" 2>&1; then
 		echo "kokoro failed, falling back to piper"
 		if ! echo "$spoken" | piper --model "$piper_voice" --output_file "$tmpdir/part.wav" 2>&1; then
 			echo "piper failed too"

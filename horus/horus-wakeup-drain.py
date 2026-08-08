@@ -3,7 +3,8 @@
 # minute via wakeup.nix (user timer). For each due job: run the agent in the
 # container with the job's message, deliver the answer over the job's channel
 # (speak = horus-tts + pw-play on the host's default sink, whatsapp = bridge
-# /send, auto = speak with whatsapp fallback). Semantics: repeating jobs are
+# /send, auto = speak with whatsapp fallback, both = a very short spoken line
+# plus the full text on WhatsApp). Semantics: repeating jobs are
 # rescheduled BEFORE firing (a drain crash can't double-fire them); one-shots
 # are marked done before firing (no double-send) — fire() itself reports a
 # failed run to Kurt via WhatsApp, so a failure is never silent either way.
@@ -12,6 +13,7 @@
 import fcntl
 import json
 import os
+import re
 import subprocess
 from datetime import datetime, timedelta
 
@@ -63,16 +65,32 @@ def append(entry):
         f.write(json.dumps(entry) + "\n")
 
 
+TWO_PART_INSTRUCTIONS = (
+    "[IMPORTANT: Do what the message says (your tools work normally). Answer in TWO parts: "
+    "first ONE very short spoken line — max ~8 words, no numbers or detail unless essential; "
+    "it is read aloud on the speakers, so it must be as short as possible (e.g. \"reminder for "
+    "the exam\", NOT \"Reminder for you to go to the exam, which you have in 2h...\"). Then a "
+    "line containing only %%DETAIL. Then the fuller version, which is sent to Kurt on WhatsApp — "
+    "he asks for more if he wants it. No lists, no markdown in either part. If there is nothing "
+    "worth delivering right now, answer with exactly the single word: skip]"
+)
+
+
 def run_agent(job):
     """Returns (texts, died, detail)."""
+    if job["channel"] == "both":
+        tail = TWO_PART_INSTRUCTIONS
+    else:
+        tail = (
+            "[IMPORTANT: Do what the message says (your tools work normally). Every text block you emit "
+            f"is delivered to Kurt via {job['channel']} — keep it SHORT and conversational, it may be "
+            "read aloud: no lists, no markdown. If there is nothing worth delivering right now, answer "
+            "with exactly the single word: skip]"
+        )
     prompt = (
         f"[Scheduled wake-up you set for yourself (id {job['id']}, due {job['next']}, now {now_str()}). "
         "Kurt did NOT just speak to you — a timer fired. Your message to yourself:]\n"
-        f"{job['message']}\n"
-        "[IMPORTANT: Do what the message says (your tools work normally). Every text block you emit "
-        f"is delivered to Kurt via {job['channel']} — keep it SHORT and conversational, it may be "
-        "read aloud: no lists, no markdown. If there is nothing worth delivering right now, answer "
-        "with exactly the single word: skip]"
+        f"{job['message']}\n" + tail
     )
     inner = (
         "cd /home/horus/work && "
@@ -114,12 +132,40 @@ def shquote(s):
     return "'" + s.replace("'", "'\\''") + "'"
 
 
-def deliver(job, text):
+# The `both` channel splits ONE agent answer into a spoken half and a WhatsApp
+# half on a sentinel line. Chosen over the alternatives because:
+#  - "first text part is the short one" is actively wrong: opencode emits a text
+#    part per streamed block, a short reply is often a single part (so there is
+#    no long half at all), and a tool-call preamble ("let me check the lights")
+#    is itself a text part — that would become the spoken half.
+#  - a structured JSON reply forces schema wrangling onto a 35B local model on
+#    the coldest run of the day; a malformed object degrades to nothing.
+# The sentinel matches an idiom already used here (%%EXIT, and briefing.nix),
+# survives markdown stripping, cannot occur accidentally in prose, and — the
+# deciding property — is applied to the JOINED text, so arbitrary streaming
+# splits do not matter.
+SENTINEL = re.compile(r"(?mi)^[ \t]*%%\s*DETAIL[ \t]*:?[ \t]*$")
+
+
+def split_two(joined):
+    """(short, detail). No sentinel -> (joined, '')."""
+    parts = SENTINEL.split(joined, maxsplit=1)
+    return parts[0].strip(), (parts[1].strip() if len(parts) > 1 else "")
+
+
+def deliver(job, short, detail):
     ch = job["channel"]
+    # speak/whatsapp/auto never see a sentinel (only `both` asks for one), so
+    # rejoining is a no-op for them and their behaviour is unchanged.
+    text = short if not detail else f"{short}\n{detail}".strip()
     if ch == "speak":
         if speak(text):
             log(f"{job['id']}: spoken on the default sink")
             return True
+        # Under the default-sink rule a failed speak() no longer means "wrong
+        # device" — it means no audio came out at all. An honestly-labelled
+        # WhatsApp message beats losing the reminder, even when (as with
+        # lights2130) it turns a spoken question into a written one.
         if send_whatsapp(f"(speakers unavailable) {text}"):
             log(f"{job['id']}: speakers failed — delivered via WhatsApp")
             return True
@@ -129,6 +175,26 @@ def deliver(job, text):
         if ok:
             log(f"{job['id']}: delivered via WhatsApp")
         return ok
+    if ch == "both":
+        spoken, truncated = short_form(short or detail, limit=160)
+        if truncated:
+            # either no sentinel at all, or the model ignored "one very short
+            # line" — worth knowing about when tuning the prompt
+            log(f"{job['id']}: spoken half had to be shortened to {len(spoken)} chars")
+        wa = detail or short
+        spoke = speak(spoken) if spoken else False
+        sent = send_whatsapp(wa) if wa else False
+        if spoke:
+            log(f"{job['id']}: spoken on the default sink ({len(spoken)} chars)")
+        else:
+            log(f"{job['id']}: spoken half NOT delivered")
+        if sent:
+            log(f"{job['id']}: detail delivered via WhatsApp")
+        else:
+            log(f"{job['id']}: WhatsApp half NOT delivered")
+        # deliberately NO "(speakers unavailable)" fallback here: the detail is
+        # already on WhatsApp, so a fallback would just double-send it
+        return spoke or sent
     # auto: speakers first, whatsapp fallback
     if speak(text):
         log(f"{job['id']}: spoken on the default sink")
@@ -169,19 +235,23 @@ def fire_catchup(missed):
 
 def fire(job):
     log(f"firing {job['id']} ({job['next']}, {job['channel']}): {job['message'][:80]}")
-    texts, died, detail = run_agent(job)
+    texts, died, why = run_agent(job)
     joined = "\n".join(texts).strip()
-    if joined.lower() == "skip":
+    short, detail = split_two(joined)
+    # For every channel but `both` there is no sentinel, so short == joined and
+    # detail == "" — this is byte-identical to the old `joined.lower() == "skip"`
+    # check. For `both` it also suppresses "skip\n%%DETAIL\nskip".
+    if short.lower().strip(" .!") == "skip" and detail.lower().strip(" .!") in ("", "skip"):
         log(f"{job['id']}: agent chose skip")
         return
     if not joined or died:
-        log(f"{job['id']}: run died or empty ({detail})")
+        log(f"{job['id']}: run died or empty ({why})")
         send_whatsapp(
-            f"Heads-up: my scheduled wake-up '{job['message'][:60]}…' (id {job['id']}) failed ({detail}). "
+            f"Heads-up: my scheduled wake-up '{job['message'][:60]}…' (id {job['id']}) failed ({why}). "
             "I'll try again at its next occurrence if it repeats."
         )
         return
-    if not deliver(job, joined):
+    if not deliver(job, short, detail):
         log(f"{job['id']}: delivery failed on all channels")
 
 

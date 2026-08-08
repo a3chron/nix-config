@@ -12,10 +12,11 @@ import sys
 import time
 import wave
 
-import urllib.request
-
 import evdev
 from evdev import InputDevice, UInput, ecodes
+
+# the host's audio producers (music :8877, read-aloud :8878) live in one place
+import horus_players
 
 DEVICE_NAME = "Nothing Headphone (1) (AVRCP)"
 PTT_KEY = ecodes.KEY_NEXTSONG  # paddle-right (the AI Button is silent on Linux)
@@ -30,7 +31,6 @@ CHIME_CANCEL = f"{SOUNDS}/dialog-error.oga"        # abort tone = "stopped"
 # so the "talk now" cue is as audible as the rest (pw-play linear volume)
 CHIME_START_VOLUME = 1.5
 WARMUP = "/run/current-system/sw/bin/horus-warmup"
-MUSIC_URL = "http://127.0.0.1:8877"
 
 RATE = 16000
 CHUNK_BYTES = RATE * 2 // 10        # 0.1s of s16 mono
@@ -228,20 +228,17 @@ def dispatch_warmup():
         print(f"warmup dispatch failed: {e}", file=sys.stderr, flush=True)
 
 
-def resume_music_if_paused():
+def resume_audio_if_paused():
     """After a SIGKILL teardown the respond script's EXIT trap (which resumes
-    ducked music) may never have run — un-pause here. A song Kurt paused
-    manually *before* the round would also resume; rare, accepted."""
-    try:
-        with urllib.request.urlopen(f"{MUSIC_URL}/status", timeout=3) as r:
-            import json
-            if json.load(r).get("state") == "paused":
-                urllib.request.urlopen(
-                    urllib.request.Request(f"{MUSIC_URL}/resume", method="POST"), timeout=3
-                )
-                print("resumed music left paused by cancelled round", flush=True)
-    except Exception:
-        pass  # daemon down / nothing playing — nothing to resume
+    ducked audio) may never have run — un-pause here.
+
+    Nobody recorded WHAT this round ducked, so this is the blunt repair path
+    (horus_players.unduck_all with no argument). It is blunt only for music: a
+    song Kurt paused manually before the round would also resume — rare,
+    accepted, and unchanged from before. A read-aloud is NOT blunt: /unduck
+    refuses unless the daemon paused it for a voice round itself, so an article
+    Kurt paused with his headphone button survives a cancelled round intact."""
+    horus_players.unduck_all()
 
 
 def cancel_run():
@@ -307,7 +304,7 @@ def respond(wav, dev):
             except ProcessLookupError:
                 pass
             proc.wait()
-            resume_music_if_paused()  # SIGKILL skipped the respond script's resume trap
+            resume_audio_if_paused()  # SIGKILL skipped the respond script's resume trap
         if cancelled:
             chime(CHIME_CANCEL, wait=True)
 

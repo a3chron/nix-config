@@ -31,6 +31,9 @@ import subprocess
 import tempfile
 import urllib.request
 
+# the host's audio producers (music :8877, read-aloud :8878) live in one place
+import horus_players
+
 HOME = "/home/a3chron"
 CONTACTS = f"{HOME}/horus/memory/whatsapp-contacts.json"
 TTS = "/run/current-system/sw/bin/horus-tts"
@@ -75,15 +78,6 @@ def send_whatsapp(text):
     except Exception as e:
         log(f"whatsapp send failed: {e}")
         return False
-
-
-def music_call(path, method="GET"):
-    try:
-        req = urllib.request.Request(f"http://127.0.0.1:8877{path}", method=method)
-        with urllib.request.urlopen(req, timeout=3) as r:
-            return json.load(r)
-    except Exception:
-        return None
 
 
 # markdown -> speakable text. Line-by-line port of the sed pipeline in
@@ -153,7 +147,7 @@ def speak(text, tts_timeout=60, play_timeout=120):
         log("nothing left to speak after markdown stripping")
         return False
     wav = None
-    ducked = False
+    ducked = set()
     try:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
             wav = tf.name
@@ -165,11 +159,10 @@ def speak(text, tts_timeout=60, play_timeout=120):
             return False
         if os.path.getsize(wav) == 0:
             return False
-        # duck horus-music while speaking (same idea as voice rounds) — a
-        # question mixed under a running song is easy to miss entirely
-        st = music_call("/status")
-        if st and st.get("state") == "playing":
-            ducked = music_call("/pause", "POST") is not None
+        # duck every host audio producer while speaking (same idea as voice
+        # rounds) — a question mixed under a running song, or under an article
+        # being read aloud, is easy to miss entirely
+        ducked = horus_players.duck_all()
         ok = subprocess.run([PWPLAY, wav], capture_output=True, timeout=play_timeout).returncode == 0
         return ok
     except Exception as e:
@@ -177,7 +170,7 @@ def speak(text, tts_timeout=60, play_timeout=120):
         return False
     finally:
         if ducked:
-            music_call("/resume", "POST")
+            horus_players.unduck_all(ducked)
         if wav:
             try:
                 os.unlink(wav)

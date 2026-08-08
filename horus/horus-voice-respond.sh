@@ -18,28 +18,20 @@ tts_speed=1.15
 wav="$1"
 tmpdir=$(mktemp -d /tmp/horus-voice.XXXXXX)
 
-# Music integration (horus-music daemon, music.nix): two rules keep songs and
-# spoken replies from talking over each other.
-#  1. A song that STARTED during this round IS the answer — every later TTS
-#     part (and the no-answer fallbacks) is skipped.
-#  2. Music that was already playing BEFORE the round is paused for the first
+# Audio integration (horus-music :8877, horus-read :8878): two rules keep
+# playing audio and spoken replies from talking over each other.
+#  1. Audio that STARTED during this round IS the answer — every later TTS
+#     part (and the no-answer fallbacks) is skipped. That is true of a song and
+#     equally of an article Horus started reading aloud.
+#  2. Audio that was already playing BEFORE the round is paused for the first
 #     spoken part ("ducked") and resumed when the round ends.
-music=http://127.0.0.1:8877
+# The player table (and the fact that music has no /duck while read does) lives
+# in one place, shared with the python callers' horus_players.py:
+source /home/a3chron/nixos-config/horus/horus-audio-players.sh
 round_start=$(date +%s)
-# -m 3, not 1: under a cold model prefill the daemon can take >1s to answer,
-# and a timed-out probe silently disabled ducking (Horus talked over the song)
-music_state() { curl -sf -m 3 "$music/status" 2>/dev/null | jq -r '.state // "stopped"'; }
-music_started_this_round() {
-	local at
-	at=$(curl -sf -m 3 "$music/status" 2>/dev/null \
-		| jq -r 'if .state != "stopped" then (.started_at // 0 | floor) else empty end')
-	[ -n "$at" ] && [ "$at" -ge "$round_start" ]
-}
 
 cleanup() {
-	if [ -f "$tmpdir/ducked" ]; then
-		curl -sf -m 3 -X POST "$music/resume" >/dev/null 2>&1
-	fi
+	horus_unduck_all "$tmpdir"
 	rm -rf "$tmpdir"
 }
 trap cleanup EXIT
@@ -77,15 +69,14 @@ play() {
 
 # markdown -> speakable text, then synthesize + play (blocking, so parts queue)
 speak() {
-	# a song the agent just started is the answer — don't talk over it
-	if music_started_this_round; then
-		echo "music started this round — skipping TTS"
+	# audio the agent just started (a song, or an article being read aloud) is
+	# the answer — don't talk over it
+	if horus_started_since "$round_start"; then
+		echo "audio started this round — skipping TTS"
 		return 0
 	fi
-	# duck pre-existing music while Horus speaks (resumed in cleanup)
-	if [ ! -f "$tmpdir/ducked" ] && [ "$(music_state)" = "playing" ]; then
-		curl -sf -m 3 -X POST "$music/pause" >/dev/null 2>&1 && touch "$tmpdir/ducked"
-	fi
+	# duck pre-existing audio while Horus speaks (resumed in cleanup)
+	horus_duck_all "$tmpdir"
 	local spoken
 	spoken=$(echo "$1" | sed -E \
 		-e 's/\*\*([^*]+)\*\*/\1/g' \
@@ -204,6 +195,7 @@ did not ask about. Save the details for when the request was an actual question.
 			elif $t == "web_fetch" then ($i.url // "")
 			elif $t == "whatsapp_send" then ($i.to // "")
 			elif $t == "music" then ([$i.action, $i.query] | map(select(. != null and . != "")) | join(" "))
+			elif $t == "read_aloud" then ([$i.action, $i.url] | map(select(. != null and . != "")) | join(" "))
 			elif $t == "nanoleaf" or $t == "studium" then ($i.action // "")
 			elif $t == "pdf" then ($i.file // "")
 			elif $t == "history" then ([$i.source, $i.since] | map(select(. != null and . != "")) | join(" "))
@@ -303,10 +295,10 @@ died=""
 cause=""
 [ -f "$tmpdir/toolerr" ] && cause=" The $(cat "$tmpdir/toolerr") step failed."
 
-if music_started_this_round; then
-	# the song is the answer — a round with no (spoken) text is expected here,
-	# so neither fallback applies
-	echo "round ended with music playing"
+if horus_started_since "$round_start"; then
+	# the song / the article is the answer — a round with no (spoken) text is
+	# expected here, so neither fallback applies
+	echo "round ended with audio playing"
 elif [ ! -f "$tmpdir/spoke" ]; then
 	echo "no reply text received (finish=${finish:-none} exit=${ec:-none})"
 	# a stale/broken session id would keep failing every round — drop it

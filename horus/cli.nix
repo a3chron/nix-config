@@ -101,6 +101,27 @@ let
 					*CANCELLED*) echo "horus: cancelled the current run — model stays loaded" ;;
 					*)           echo "horus: nothing running to cancel" ;;
 				esac
+				# ...but `opencode run` is no longer the only kind of run: since the
+				# approval work, the WhatsApp path can be driven through the persistent
+				# opencode server, which pkill above deliberately does NOT touch.
+				# /session/status only lists NON-idle sessions (verified: idle ones are
+				# omitted entirely, not returned as {"type":"idle"}). Runs INSIDE the
+				# container so the password never reaches the host process table.
+				n=$(sudo machinectl shell horus@horus /run/current-system/sw/bin/bash -c \
+					'set -a; . /home/horus/work/.secrets/opencode-server.env; set +a
+					 ids=$(curl -sf -u "opencode:$OPENCODE_SERVER_PASSWORD" http://127.0.0.1:4096/session/status | jq -r "keys[]?")
+					 c=0; for i in $ids; do
+					   curl -sf -u "opencode:$OPENCODE_SERVER_PASSWORD" -X POST "http://127.0.0.1:4096/session/$i/abort" >/dev/null && c=$((c+1))
+					 done; echo "ABORTED=$c"' 2>/dev/null | grep -o 'ABORTED=[0-9]*' | cut -d= -f2)
+				[ "''${n:-0}" -gt 0 ] && echo "horus: aborted $n opencode server session(s)"
+				# abort does NOT clear pending permissions (verified — they linger in
+				# GET /permission indefinitely), so the broker rejects each one WITH A
+				# MESSAGE. Never bare: an unexplained denial makes the model invent the
+				# output of the command it never ran.
+				if c=$(curl -sf --max-time 5 -X POST -H "X-Horus-Broker: $(cat /home/a3chron/horus/.secrets/broker-local 2>/dev/null)" \
+						http://127.0.0.1:8790/cancel-all | jq -r '.cancelled // 0'); then
+					[ "''${c:-0}" -gt 0 ] && echo "horus: cancelled $c pending approval(s)"
+				fi
 				;;
 			status)
 				printf 'container:  %s\n' "$(systemctl is-active container@horus.service)"
@@ -121,6 +142,25 @@ let
 				else
 					printf 'whatsapp:   %s\n' "unreachable (container down?)"
 				fi
+				# 401 counts as UP: the opencode server demands Basic auth on every
+				# route including /global/health, and probing unauthenticated keeps the
+				# password out of the host process table.
+				oc=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:4096/global/health || echo 000)
+				case "$oc" in
+					200|401) printf 'opencode:   active\n' ;;
+					*)       printf 'opencode:   down\n' ;;
+				esac
+				# A dead broker breaks approvals WITHOUT failing a unit — nothing can
+				# unblock a pending permission but its expiry timer (the server has no
+				# timeout of its own), so surface it here as well as via OnFailure.
+				if br=$(curl -sf --max-time 2 http://127.0.0.1:8790/health); then
+					printf 'approvals:  %s\n' "$(echo "$br" | jq -r '
+						(if .sse.connected then "" else "SSE DOWN — " end) +
+						(if (.pending|length) == 0 then "none pending"
+						 else "\(.pending|length) pending — " + ([.pending[] | "[\(.code)] \(.permission) \((.expiresInSec/60)|floor)m left"] | join(", ")) end)')"
+				else
+					printf 'approvals:  broker unreachable (systemctl --user status horus-approval-broker)\n'
+				fi
 				for d in /sys/class/drm/card*/device; do
 					if [ -f "$d/mem_info_vram_used" ] && [ "$(cat "$d/mem_info_vram_total")" -gt 4000000000 ]; then
 						used=$(( $(cat "$d/mem_info_vram_used") / 1024 / 1024 ))
@@ -136,7 +176,7 @@ let
 						printf 'ALERT:      %s FAILED (journalctl -u %s)\n' "$u" "$u"
 					fi
 				done
-				for u in horus-bt-watch horus-kokoro horus-voice horus-music horus-read playerctld horus-studium horus-wakeup-drain.service horus-wakeup-drain.timer horus-morning.service horus-morning.timer; do
+				for u in horus-bt-watch horus-kokoro horus-voice horus-music horus-read playerctld horus-studium horus-approval-broker horus-wakeup-drain.service horus-wakeup-drain.timer horus-morning.service horus-morning.timer; do
 					if systemctl --user is-failed -q "$u" 2>/dev/null; then
 						printf 'ALERT:      user %s FAILED (journalctl --user -u %s)\n' "$u" "$u"
 					fi

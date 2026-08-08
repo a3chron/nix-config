@@ -17,5 +17,6 @@
 		./morning.nix
 		./alert.nix
 		./wa-watch.nix
+		./approval.nix
 	];
 }

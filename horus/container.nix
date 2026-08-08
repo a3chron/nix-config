@@ -266,13 +266,73 @@ in
 				if [ "$USER" = "horus" ]; then cd /home/horus/work; fi
 			'';
 
+			# Persistent opencode HTTP server (A3C-167). The ONLY transport that can
+			# hand a permission prompt to something other than the terminal: the
+			# `opencode run` CLI hard-codes an auto-reject for every permission.asked
+			# in non-interactive mode (verified in the 1.17.9 binary — and it does
+			# that even with `run --attach`, so attaching a one-shot to this server
+			# does NOT help). Remote approval therefore requires the server's
+			# POST /permission/{id}/reply, which only exists here.
+			#
+			# Nothing uses it yet: WhatsApp, voice, briefing, wakeup and ask-horus
+			# all still shell out to `opencode run`. This unit only has to be up and
+			# healthy; the host-side approval broker (approval.nix) attaches to its
+			# SSE stream. Migrating the call sites is A3C-167 phases 3-4.
+			#
+			# --port 4096 EXPLICITLY: the flag's default is 0 (a random port), and
+			# `server.port` in ~/horus/opencode.json is NOT read — the server reads
+			# port/hostname from the GLOBAL config only. 4096 is free on this host
+			# (8080 llama-swap, 8765 wa-bridge, 8877 music, 8790 broker, 8888/8899,
+			# 3005, 5432, 5800, 631, 11987 are taken).
+			#
+			# --hostname 127.0.0.1: the container has NO privateNetwork, so this is
+			# the host's loopback too — which is how the broker reaches it without
+			# machinectl. Never bind 0.0.0.0 here: the host firewall is disabled, so
+			# that would publish the permission API on every WiFi Kurt joins.
+			#
+			# Basic auth is only enforced when OPENCODE_SERVER_PASSWORD is set and
+			# non-empty; systemd reads the EnvironmentFile as root before dropping to
+			# `horus`. If the file is missing the unit FAILS LOUDLY rather than
+			# starting an unauthenticated permission API on loopback — that is the
+			# intended behaviour, do not add a ConditionPathExists (which would skip
+			# it silently instead).
+			#
+			# Deliberately NO OPENCODE_PERMISSION here: it is process-wide, and this
+			# one process serves `horus chat` too — the unattended ask->deny policy
+			# would leak into Kurt's interactive sessions. Per-session `permission`
+			# arrays (POST /session) replace it; see .opencode/broker-session-permission.json.
+			systemd.services.opencode-server = {
+				description = "Horus opencode HTTP server (remote permission brokering)";
+				wantedBy = [ "multi-user.target" ];
+				after = [ "network.target" ];
+				serviceConfig = {
+					User = "horus";
+					WorkingDirectory = "/home/horus/work";
+					Environment = [
+						"HOME=/home/horus"
+						"OPENCODE_SERVER_USERNAME=opencode"
+					];
+					EnvironmentFile = "/home/horus/work/.secrets/opencode-server.env";
+					ExecStart = "${unstable.opencode}/bin/opencode serve --port 4096 --hostname 127.0.0.1";
+					Restart = "always";
+					RestartSec = 5;
+					# journal only (journalctl -M horus -u opencode-server). The
+					# append:-to-file pattern below exists solely because the pairing QR
+					# has to be readable from the host; nothing here needs that.
+				};
+			};
+
 			# WhatsApp bridge (Baileys) — receives messages and auto-answers
 			# allowlisted senders via `opencode run`; pairs via QR printed to
 			# the journal / bridge.log
 			systemd.services.wa-bridge = {
 				description = "Horus WhatsApp bridge";
 				wantedBy = [ "multi-user.target" ];
-				after = [ "network.target" ];
+				# `wants`, not `requires`: the bridge still runs `opencode run` and is
+				# fully functional with the server down. Ordering only, so that once
+				# phase 3 switches its transport it never races a cold server on boot.
+				after = [ "network.target" "opencode-server.service" ];
+				wants = [ "opencode-server.service" ];
 				serviceConfig = {
 					User = "horus";
 					WorkingDirectory = "/home/horus/work/bridge";

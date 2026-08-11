@@ -26,6 +26,7 @@ import os
 import subprocess
 import sys
 import time
+import traceback
 import urllib.request
 from datetime import datetime
 
@@ -35,12 +36,19 @@ HOME = "/home/a3chron"
 # "YYYY-MM-DD", same convention as memory/.last-backup (backup.nix)
 STAMP = f"{HOME}/horus/memory/.last-morning-status"
 BACKOFF_STATE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "horus-morning.backoff")
+CRASH_STATE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "horus-morning.crash")
 SUDO = "/run/wrappers/bin/sudo"
 MC = "/run/current-system/sw/bin/machinectl"
 SYSTEMCTL = "/run/current-system/sw/bin/systemctl"
 # pactl is NOT on the host PATH (only horus-voice.service adds pkgs.pulseaudio);
 # wpctl ships with wireplumber and is in /run/current-system/sw/bin.
 WPCTL = "/run/current-system/sw/bin/wpctl"
+# procps is NOT on a user unit's PATH (systemd.user gives coreutils/findutils/
+# grep/sed/systemd only), so a bare "pgrep" is FileNotFoundError — it crashed
+# every tick 05:00-11:59, and each crash fired OnFailure. Absolute, like the
+# host binaries above; horus-warmup.sh gets away with a bare pgrep because it
+# is a SYSTEM unit with a fuller PATH.
+PGREP = "/run/current-system/sw/bin/pgrep"
 
 DEADLINE_HOUR = 12  # ticket: the morning status happens "before 12:00" or not at all
 OFFLINE_GIVEUP_H = 11  # still offline at 11:00 → skip the day entirely
@@ -49,6 +57,7 @@ PROBE_URL = "https://connectivitycheck.gstatic.com/generate_204"
 PROBE_TIMEOUT = 2
 BACKOFF_START = 60  # seconds
 BACKOFF_MAX = 3600  # seconds
+CRASH_ALERT_COOLDOWN = 3600  # seconds between OnFailure alerts for the same crash
 GPU_APPS = "warthunder|minecraft|kdenlive|bambu|blender"  # same list as horus-warmup.sh
 
 
@@ -124,7 +133,7 @@ def online():
 
 
 def gpu_busy():
-    return subprocess.run(["pgrep", "-fi", GPU_APPS], capture_output=True).returncode == 0
+    return subprocess.run([PGREP, "-fi", GPU_APPS], capture_output=True).returncode == 0
 
 
 def stack_paused():
@@ -283,4 +292,38 @@ def main():
     log("done")
 
 
-main()
+# --- crash alerting -------------------------------------------------------
+# A minutely timer turns any crash BEFORE the stamp into one failed unit per
+# minute, and alert.nix's OnFailure turns each of those into a WhatsApp message
+# — the bare-`pgrep` bug sent one every minute from 05:00 to noon. So: the
+# first crash of an episode still fails loudly (that is the notification), the
+# repeats within the cooldown exit 0 and only log. Runtime-scoped state, like
+# the offline backoff, so a fresh login alerts again.
+
+
+def crash_should_alert():
+    try:
+        with open(CRASH_STATE) as f:
+            last = float(f.read().strip())
+        if time.time() - last < CRASH_ALERT_COOLDOWN:
+            return False
+    except (OSError, ValueError):
+        pass
+    try:
+        with open(CRASH_STATE, "w") as f:
+            f.write(str(time.time()))
+    except OSError:
+        pass
+    return True
+
+
+try:
+    main()
+except SystemExit:
+    raise  # the deliberate exit(1)s in main() are post-stamp, i.e. once a day
+except Exception:
+    traceback.print_exc()
+    if crash_should_alert():
+        log("crashed — alerting (further crashes stay quiet for an hour)")
+        sys.exit(1)
+    log(f"crashed again within {CRASH_ALERT_COOLDOWN // 60} min — alert suppressed")

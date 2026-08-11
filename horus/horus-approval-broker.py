@@ -149,6 +149,10 @@ CASCADE_WINDOW_SEC = float(os.environ.get("HORUS_BROKER_CASCADE_WINDOW", "10"))
 # Measured SSE heartbeat is ~10.6s, so 30s of silence really is a dead stream.
 SSE_READ_TIMEOUT = int(os.environ.get("HORUS_BROKER_SSE_TIMEOUT", "30"))
 SSE_DOWN_ALERT_SEC = int(os.environ.get("HORUS_BROKER_SSE_DOWN_ALERT", "60"))
+# Repeat spacing for Server.alert(), per key: first is immediate, then 10min,
+# 20, 40 … capped. Reset when the condition clears (see sse_loop).
+ALERT_BACKOFF_START = float(os.environ.get("HORUS_BROKER_ALERT_BACKOFF", "600"))
+ALERT_BACKOFF_MAX = float(os.environ.get("HORUS_BROKER_ALERT_BACKOFF_MAX", str(6 * 3600)))
 RENOTIFY_AFTER_SEC = int(os.environ.get("HORUS_BROKER_RENOTIFY", "120"))
 # How often to check that the runs behind our pending approvals are still alive.
 # One GET /session/status; the abort path leaves zombies that emit no event.
@@ -600,9 +604,15 @@ class Broker:
     # ---------------- alerting ----------------
 
     def alert(self, key: str, text: str):
-        """Loud, deduplicated failure notification. 10 minutes per key so a
-        flapping condition cannot turn into the 16-notifications-at-boot mess
-        that music.nix documents."""
+        """Loud, deduplicated failure notification. The first one is immediate;
+        repeats of the SAME key back off exponentially from 10 minutes to
+        ALERT_BACKOFF_MAX, because the conditions this fires on (no event
+        stream, orphaned requests) all need Kurt at a keyboard — re-sending
+        every 10 minutes for hours just trains him to ignore it. That is what
+        happened on 2026-08-11: opencode-server could not start (missing
+        EnvironmentFile), so this alerted every 10 minutes indefinitely.
+        alert.nix dedups the WhatsApp half per episode; the backoff here is what
+        also silences the desktop notification, which does not go through it."""
         log("ERROR", text)
         if not ALERTS_ENABLED:
             # HORUS_BROKER_ALERTS=0 — for hand-testing the failure paths without
@@ -612,10 +622,14 @@ class Broker:
             log("warn", "(alert suppressed: HORUS_BROKER_ALERTS=0)")
             return
         with self.lock:
-            last = self._alerts.get(key, 0)
-            if now() - last < 600:
+            last, wait = self._alerts.get(key, (0.0, 0.0))
+            if now() - last < wait:
                 return
-            self._alerts[key] = now()
+            # next repeat of this key waits twice as long, capped
+            self._alerts[key] = (
+                now(),
+                min(ALERT_BACKOFF_START if wait <= 0 else wait * 2, ALERT_BACKOFF_MAX),
+            )
         try:
             subprocess.run(
                 ["systemctl", "--user", "start", "horus-alert@horus-approval-broker.service"],
@@ -1220,6 +1234,9 @@ class Broker:
                     with self.lock:
                         self.sse_connected = True
                         self.sse_last_event = now()
+                        # the condition cleared — re-arm, so the NEXT outage is
+                        # reported immediately instead of after the grown backoff
+                        self._alerts.pop("sse-down", None)
                     backoff = 1
                     self.reconcile()
                     for raw in resp:

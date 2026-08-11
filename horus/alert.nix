@@ -4,15 +4,70 @@
 # raises a desktop notification. Best-effort: if the bridge itself is down the
 # journal entry is all that remains, but at least `horus status` now lists all
 # units too (cli.nix).
+#
+# ONE MESSAGE PER EPISODE (2026-08-11). Every repeat-alert bug so far was fixed
+# at its source — the greeter restart loop (music.nix), the bare `pgrep` in a
+# minutely timer (horus-morning.py) — but the alert path itself would happily
+# send a WhatsApp per failure forever, and with `Restart=always` +
+# `StartLimitIntervalSec=0` on most daemons that is unbounded. A broken thing is
+# still broken after the first message, so:
+#
+#   * first failure of an episode -> WhatsApp + desktop notification
+#   * repeats -> journal only, silent
+#   * a NEW episode (= the unit reached `active` again after the last alert, and
+#     the cooldown has passed) -> alerts again
+#
+# Persistently-broken-and-never-recovered therefore alerts exactly ONCE: the
+# missing-EnvironmentFile crash loop that started this (opencode-server, hence
+# the approval broker) sent one message every 10 minutes for an hour otherwise.
+# State is monotonic (/proc/uptime) in tmpfs (XDG_RUNTIME_DIR or /run), so a
+# reboot re-arms everything — a problem that survives a reboot is worth one
+# fresh message.
 { config, pkgs, lib, ... }:
 
 let
 	alertScript = pkgs.writeShellApplication {
 		name = "horus-alert";
-		runtimeInputs = [ pkgs.curl pkgs.jq ];
+		runtimeInputs = [ pkgs.curl pkgs.jq pkgs.libnotify pkgs.systemd ];
 		text = ''
+			# usage: horus-alert <unit> [--user]   (--user = user manager + desktop notification)
 			unit="''${1:-unknown-unit}"
-			echo "horus-alert: $unit failed"
+			mode="''${2:-}"
+			cooldown="''${HORUS_ALERT_COOLDOWN:-3600}"
+
+			echo "horus-alert: $unit failed"   # the journal ALWAYS gets every failure
+
+			# --- dedup ------------------------------------------------------
+			# Monotonic seconds since boot, matching ActiveEnterTimestampMonotonic;
+			# no wall-clock parsing and immune to a clock jump.
+			now=$(cut -d. -f1 /proc/uptime)
+			statedir="''${XDG_RUNTIME_DIR:-/run/horus-alert}"
+			mkdir -p "$statedir" 2>/dev/null || true
+			state="$statedir/horus-alert.''${unit//\//_}"
+			last=$(cat "$state" 2>/dev/null || true)
+			case "$last" in ""|*[!0-9]*) last="" ;; esac   # ignore junk/first run
+
+			if [ -n "$last" ]; then
+				if [ "$(( now - last ))" -lt "$cooldown" ]; then
+					echo "horus-alert: already reported $(( now - last ))s ago — journal only"
+					exit 0
+				fi
+				# systemctl resolves a bare name to .service, and prints 0 for a
+				# unit that never came up — which is exactly the "still the same
+				# broken episode" case we want to stay quiet about.
+				active_us=$(systemctl ''${mode:+--user} show -p ActiveEnterTimestampMonotonic --value "$unit" 2>/dev/null || echo 0)
+				case "$active_us" in ""|*[!0-9]*) active_us=0 ;; esac
+				if [ "$(( active_us / 1000000 ))" -le "$last" ]; then
+					echo "horus-alert: same episode (never recovered since the last alert) — journal only"
+					exit 0
+				fi
+			fi
+			printf '%s' "$now" > "$state" 2>/dev/null || true
+
+			# --- deliver ----------------------------------------------------
+			if [ -n "$mode" ]; then
+				notify-send -u critical "Horus" "$unit failed — check journalctl --user -u $unit" || true
+			fi
 			jid=$(jq -r 'to_entries | map(select(.key | startswith("kurt")))[0].value // empty' \
 				/home/a3chron/horus/memory/whatsapp-contacts.json 2>/dev/null || true)
 			if [ -n "$jid" ]; then
@@ -46,10 +101,10 @@ in
 		unitConfig.ConditionUser = "a3chron";
 		serviceConfig = {
 			Type = "oneshot";
-			ExecStart = pkgs.writeShellScript "horus-alert-user" ''
-				${pkgs.libnotify}/bin/notify-send -u critical "Horus" "$1 failed — check journalctl --user -u $1" || true
-				exec ${alertScript}/bin/horus-alert "$1"
-			'' + " %i";
+			# --user: query the user manager for the recovery check, and raise the
+			# desktop notification. Both live in the script now so the dedup
+			# covers the notification too — it used to fire on every repeat.
+			ExecStart = "${alertScript}/bin/horus-alert %i --user";
 		};
 	};
 }

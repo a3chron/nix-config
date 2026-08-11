@@ -16,12 +16,40 @@
 #   headphone button survives a voice round untouched. Music keeps its blunt
 #   "any paused song gets resumed" repair (see resume_all_blunt) because it has
 #   no way to tell the two apart.
+#
+# THIRD producer (added 2026-08-10): everything else on the desktop, via MPRIS.
+# The two daemons above are Horus's OWN players — but most of Kurt's music is
+# YouTube/Spotify in Zen, which neither daemon knows about, so an un-initiated
+# line (a wake-up, the morning status) was mixed straight over a running song.
+# MPRIS is the only interface all of them share. We speak it with `busctl`
+# (systemd, always on the host PATH) rather than playerctl, which lives in
+# read.nix's systemPackages and is therefore missing on any generation built
+# before it.
 import json
+import os
+import subprocess
 import urllib.request
 
 MUSIC_URL = "http://127.0.0.1:8877"
 READ_URL = "http://127.0.0.1:8878"
 TIMEOUT = 3
+
+BUSCTL = "/run/current-system/sw/bin/busctl"
+MPRIS_PREFIX = "org.mpris.MediaPlayer2."
+MPRIS_PATH = "/org/mpris/MediaPlayer2"
+MPRIS_IFACE = "org.mpris.MediaPlayer2.Player"
+# Bus names the generic path must NOT touch:
+#   playerctld — a PROXY for the others; acting on it acts twice on the real
+#                player (read.nix's header documents the same double-call trap
+#                for the Hyprland media-key binds)
+#   mpv*       — the read-aloud player. read.nix's wrapped mpv is the only mpv
+#                here that loads mpv-mpris, and it has /duck + /unduck with a
+#                pause_reason, which MPRIS Pause would bypass and corrupt.
+MPRIS_SKIP = ("playerctld", "mpv")
+# Which MPRIS players WE paused, so a SIGKILLed round (horus-ptt.py's blunt
+# repair, which gets no `ducked` set) can still put them back. Runtime-scoped:
+# a leftover from a previous login is meaningless and must not resume anything.
+MPRIS_STATE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "horus-ducked-mpris")
 
 
 def call(base, path, method="GET"):
@@ -44,6 +72,89 @@ def read_call(path, method="GET"):
     return call(READ_URL, path, method)
 
 
+# --- generic MPRIS players (Zen/Spotify/…) ---------------------------------
+
+
+def _busctl(*args):
+    """One busctl call on the SESSION bus. None on any failure — same contract
+    as call(): "this player is not playing" is the safe reading."""
+    try:
+        r = subprocess.run(
+            [BUSCTL, "--user", *args], capture_output=True, text=True, timeout=TIMEOUT
+        )
+        return r.stdout if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def mpris_players():
+    """Bus names of the players actually RUNNING right now. --acquired drops
+    the activatable-but-not-started names (playerctld shows up as one), which
+    would otherwise be D-Bus-activated by our own property read."""
+    out = _busctl("list", "--acquired", "--no-legend", "--no-pager")
+    if not out:
+        return []
+    names = []
+    for line in out.splitlines():
+        name = line.split()[0] if line.split() else ""
+        if not name.startswith(MPRIS_PREFIX):
+            continue
+        if name[len(MPRIS_PREFIX) :].split(".")[0] in MPRIS_SKIP:
+            continue
+        names.append(name)
+    return names
+
+
+def mpris_playing(name):
+    out = _busctl("get-property", name, MPRIS_PATH, MPRIS_IFACE, "PlaybackStatus")
+    return bool(out) and "Playing" in out  # busctl prints: s "Playing"
+
+
+def mpris_do(name, method):
+    return _busctl("call", name, MPRIS_PATH, MPRIS_IFACE, method) is not None
+
+
+def _mpris_state_write(names):
+    try:
+        if names:
+            with open(MPRIS_STATE, "w") as f:
+                f.write("\n".join(sorted(names)))
+        else:
+            os.unlink(MPRIS_STATE)
+    except OSError:
+        pass
+
+
+def _mpris_state_read():
+    try:
+        with open(MPRIS_STATE) as f:
+            return [n for n in f.read().split("\n") if n.strip()]
+    except OSError:
+        return []
+
+
+def mpris_duck():
+    """Pause every generic MPRIS player that is currently playing. Returns the
+    bus names we paused."""
+    paused = []
+    for name in mpris_players():
+        if mpris_playing(name) and mpris_do(name, "Pause"):
+            paused.append(name)
+    if paused:
+        _mpris_state_write(paused)
+    return paused
+
+
+def mpris_unduck(names):
+    """Resume exactly the players in `names`, and only those — Play, never
+    PlayPause: if Kurt already restarted it himself, Play is a no-op, whereas
+    PlayPause would stop the song he just resumed. A name that vanished
+    meanwhile (browser closed) simply fails its call and is dropped."""
+    for name in names:
+        mpris_do(name, "Play")
+    _mpris_state_write([])
+
+
 def duck_all():
     """Pause whatever is currently AUDIBLE so Horus can be heard. Returns the
     set of players we actually paused — pass it back to unduck_all() so we only
@@ -58,6 +169,10 @@ def duck_all():
     r = read_call("/duck", "POST")
     if r and r.get("ducked"):
         ducked.add("read")
+    # everything else on the desktop (Zen/Spotify/…), one entry per bus name so
+    # unduck_all resumes exactly what it paused
+    for name in mpris_duck():
+        ducked.add(f"mpris:{name}")
     return ducked
 
 
@@ -73,11 +188,18 @@ def unduck_all(ducked=None):
             if music_call("/resume", "POST") is not None:
                 print("resumed music left paused by cancelled round", flush=True)
         read_call("/unduck", "POST")
+        # the MPRIS half is NOT blunt: the killed round left the bus names it
+        # paused in MPRIS_STATE, so we resume those and nothing else
+        left = _mpris_state_read()
+        if left:
+            print(f"resuming {len(left)} MPRIS player(s) left paused by cancelled round", flush=True)
+            mpris_unduck(left)
         return
     if "music" in ducked:
         music_call("/resume", "POST")
     if "read" in ducked:
         read_call("/unduck", "POST")
+    mpris_unduck([d[len("mpris:") :] for d in ducked if d.startswith("mpris:")])
 
 
 def any_started_since(ts):

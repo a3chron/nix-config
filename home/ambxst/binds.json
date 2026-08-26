@@ -1,50 +1,68 @@
 {
     "ambxst": {
         "assistant": {
-            "argument": "ambxst run assistant",
-            "dispatcher": "exec",
+            "action": {
+                "args": {
+                },
+                "id": "ambxst.assistant"
+            },
             "key": "A",
             "modifiers": [
                 "SUPER"
             ]
         },
         "clipboard": {
-            "argument": "ambxst run clipboard",
-            "dispatcher": "exec",
+            "action": {
+                "args": {
+                },
+                "id": "ambxst.clipboard"
+            },
             "key": "V",
             "modifiers": [
                 "ALT"
             ]
         },
         "dashboard": {
-            "argument": "ambxst run dashboard",
-            "dispatcher": "exec",
-            "flags": "",
+            "action": {
+                "args": {
+                },
+                "id": "ambxst.dashboard"
+            },
             "key": "D",
             "modifiers": [
                 "SUPER"
             ]
         },
         "emoji": {
-            "argument": "ambxst run emoji",
-            "dispatcher": "exec",
+            "action": {
+                "args": {
+                },
+                "id": "ambxst.emoji"
+            },
             "key": "PERIOD",
             "modifiers": [
                 "SUPER"
             ]
         },
         "launcher": {
-            "argument": "ambxst run launcher",
-            "dispatcher": "exec",
-            "flags": "r",
+            "action": {
+                "args": {
+                },
+                "id": "ambxst.launcher",
+                "layouts": [
+                ]
+            },
             "key": "Super_L",
             "modifiers": [
                 "SUPER"
             ]
         },
         "notes": {
-            "argument": "ambxst run notes",
-            "dispatcher": "exec",
+            "action": {
+                "args": {
+                },
+                "id": "ambxst.notes"
+            },
             "key": "N",
             "modifiers": [
                 "SUPER"
@@ -52,9 +70,11 @@
         },
         "system": {
             "config": {
-                "argument": "ambxst run config",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.config"
+                },
                 "key": "C",
                 "modifiers": [
                     "SUPER",
@@ -62,9 +82,11 @@
                 ]
             },
             "lens": {
-                "argument": "ambxst run lens",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.lens"
+                },
                 "key": "A",
                 "modifiers": [
                     "SUPER",
@@ -72,36 +94,44 @@
                 ]
             },
             "lockscreen": {
-                "argument": "loginctl lock-session",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "system.lock"
+                },
                 "key": "L",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "overview": {
-                "argument": "ambxst run overview",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.overview"
+                },
                 "key": "TAB",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "powermenu": {
-                "argument": "ambxst run powermenu",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.powermenu"
+                },
                 "key": "ESCAPE",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "quit": {
-                "argument": "ambxst quit",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.quit"
+                },
                 "key": "B",
                 "modifiers": [
                     "SUPER",
@@ -110,9 +140,11 @@
                 ]
             },
             "reload": {
-                "argument": "ambxst reload",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.reload"
+                },
                 "key": "B",
                 "modifiers": [
                     "SUPER",
@@ -120,9 +152,11 @@
                 ]
             },
             "screenrecord": {
-                "argument": "ambxst run screenrecord",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.screenrecord"
+                },
                 "key": "R",
                 "modifiers": [
                     "SUPER",
@@ -130,9 +164,11 @@
                 ]
             },
             "screenshot": {
-                "argument": "ambxst run screenshot",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.screenshot"
+                },
                 "key": "S",
                 "modifiers": [
                     "SUPER",
@@ -140,9 +176,11 @@
                 ]
             },
             "tools": {
-                "argument": "ambxst run tools",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.tools"
+                },
                 "key": "S",
                 "modifiers": [
                     "SUPER"
@@ -150,16 +188,22 @@
             }
         },
         "tmux": {
-            "argument": "ambxst run tmux",
-            "dispatcher": "exec",
+            "action": {
+                "args": {
+                },
+                "id": "ambxst.tmux"
+            },
             "key": "T",
             "modifiers": [
                 "SUPER"
             ]
         },
         "wallpapers": {
-            "argument": "ambxst run wallpapers",
-            "dispatcher": "exec",
+            "action": {
+                "args": {
+                },
+                "id": "ambxst.wallpapers"
+            },
             "key": "COMMA",
             "modifiers": [
                 "SUPER"
@@ -170,9 +214,9 @@
         {
             "actions": [
                 {
-                    "argument": "",
-                    "dispatcher": "killactive",
-                    "flags": "",
+                    "args": {
+                    },
+                    "id": "window.close",
                     "layouts": [
                     ]
                 }
@@ -191,9 +235,10 @@
         {
             "actions": [
                 {
-                    "argument": "1",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "index": "1"
+                    },
+                    "id": "workspace.switch",
                     "layouts": [
                     ]
                 }
@@ -212,9 +257,10 @@
         {
             "actions": [
                 {
-                    "argument": "2",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "index": "2"
+                    },
+                    "id": "workspace.switch",
                     "layouts": [
                     ]
                 }
@@ -233,9 +279,10 @@
         {
             "actions": [
                 {
-                    "argument": "3",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "index": "3"
+                    },
+                    "id": "workspace.switch",
                     "layouts": [
                     ]
                 }
@@ -254,9 +301,10 @@
         {
             "actions": [
                 {
-                    "argument": "4",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "index": "4"
+                    },
+                    "id": "workspace.switch",
                     "layouts": [
                     ]
                 }
@@ -275,9 +323,10 @@
         {
             "actions": [
                 {
-                    "argument": "5",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "index": "5"
+                    },
+                    "id": "workspace.switch",
                     "layouts": [
                     ]
                 }
@@ -296,9 +345,10 @@
         {
             "actions": [
                 {
-                    "argument": "6",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "index": "6"
+                    },
+                    "id": "workspace.switch",
                     "layouts": [
                     ]
                 }
@@ -317,9 +367,10 @@
         {
             "actions": [
                 {
-                    "argument": "7",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "index": "7"
+                    },
+                    "id": "workspace.switch",
                     "layouts": [
                     ]
                 }
@@ -338,9 +389,10 @@
         {
             "actions": [
                 {
-                    "argument": "8",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "index": "8"
+                    },
+                    "id": "workspace.switch",
                     "layouts": [
                     ]
                 }
@@ -359,9 +411,10 @@
         {
             "actions": [
                 {
-                    "argument": "9",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "index": "9"
+                    },
+                    "id": "workspace.switch",
                     "layouts": [
                     ]
                 }
@@ -380,9 +433,10 @@
         {
             "actions": [
                 {
-                    "argument": "10",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "index": "10"
+                    },
+                    "id": "workspace.switch",
                     "layouts": [
                     ]
                 }
@@ -401,9 +455,10 @@
         {
             "actions": [
                 {
-                    "argument": "1",
-                    "dispatcher": "movetoworkspace",
-                    "flags": "",
+                    "args": {
+                        "index": "1"
+                    },
+                    "id": "workspace.move-window",
                     "layouts": [
                     ]
                 }
@@ -423,9 +478,10 @@
         {
             "actions": [
                 {
-                    "argument": "2",
-                    "dispatcher": "movetoworkspace",
-                    "flags": "",
+                    "args": {
+                        "index": "2"
+                    },
+                    "id": "workspace.move-window",
                     "layouts": [
                     ]
                 }
@@ -445,9 +501,10 @@
         {
             "actions": [
                 {
-                    "argument": "3",
-                    "dispatcher": "movetoworkspace",
-                    "flags": "",
+                    "args": {
+                        "index": "3"
+                    },
+                    "id": "workspace.move-window",
                     "layouts": [
                     ]
                 }
@@ -467,9 +524,10 @@
         {
             "actions": [
                 {
-                    "argument": "4",
-                    "dispatcher": "movetoworkspace",
-                    "flags": "",
+                    "args": {
+                        "index": "4"
+                    },
+                    "id": "workspace.move-window",
                     "layouts": [
                     ]
                 }
@@ -489,9 +547,10 @@
         {
             "actions": [
                 {
-                    "argument": "5",
-                    "dispatcher": "movetoworkspace",
-                    "flags": "",
+                    "args": {
+                        "index": "5"
+                    },
+                    "id": "workspace.move-window",
                     "layouts": [
                     ]
                 }
@@ -511,9 +570,10 @@
         {
             "actions": [
                 {
-                    "argument": "6",
-                    "dispatcher": "movetoworkspace",
-                    "flags": "",
+                    "args": {
+                        "index": "6"
+                    },
+                    "id": "workspace.move-window",
                     "layouts": [
                     ]
                 }
@@ -533,9 +593,10 @@
         {
             "actions": [
                 {
-                    "argument": "7",
-                    "dispatcher": "movetoworkspace",
-                    "flags": "",
+                    "args": {
+                        "index": "7"
+                    },
+                    "id": "workspace.move-window",
                     "layouts": [
                     ]
                 }
@@ -555,9 +616,10 @@
         {
             "actions": [
                 {
-                    "argument": "8",
-                    "dispatcher": "movetoworkspace",
-                    "flags": "",
+                    "args": {
+                        "index": "8"
+                    },
+                    "id": "workspace.move-window",
                     "layouts": [
                     ]
                 }
@@ -577,9 +639,10 @@
         {
             "actions": [
                 {
-                    "argument": "9",
-                    "dispatcher": "movetoworkspace",
-                    "flags": "",
+                    "args": {
+                        "index": "9"
+                    },
+                    "id": "workspace.move-window",
                     "layouts": [
                     ]
                 }
@@ -599,9 +662,10 @@
         {
             "actions": [
                 {
-                    "argument": "10",
-                    "dispatcher": "movetoworkspace",
-                    "flags": "",
+                    "args": {
+                        "index": "10"
+                    },
+                    "id": "workspace.move-window",
                     "layouts": [
                     ]
                 }
@@ -621,9 +685,10 @@
         {
             "actions": [
                 {
-                    "argument": "e-1",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "offset": "-1"
+                    },
+                    "id": "workspace.switch-occupied",
                     "layouts": [
                     ]
                 }
@@ -642,9 +707,10 @@
         {
             "actions": [
                 {
-                    "argument": "e+1",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "offset": "+1"
+                    },
+                    "id": "workspace.switch-occupied",
                     "layouts": [
                     ]
                 }
@@ -663,9 +729,10 @@
         {
             "actions": [
                 {
-                    "argument": "e-1",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "offset": "-1"
+                    },
+                    "id": "workspace.switch-occupied",
                     "layouts": [
                     ]
                 }
@@ -685,9 +752,10 @@
         {
             "actions": [
                 {
-                    "argument": "e+1",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "offset": "+1"
+                    },
+                    "id": "workspace.switch-occupied",
                     "layouts": [
                     ]
                 }
@@ -707,9 +775,10 @@
         {
             "actions": [
                 {
-                    "argument": "-1",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "offset": "-1"
+                    },
+                    "id": "workspace.switch-relative",
                     "layouts": [
                     ]
                 }
@@ -730,9 +799,10 @@
         {
             "actions": [
                 {
-                    "argument": "+1",
-                    "dispatcher": "workspace",
-                    "flags": "",
+                    "args": {
+                        "offset": "+1"
+                    },
+                    "id": "workspace.switch-relative",
                     "layouts": [
                     ]
                 }
@@ -753,9 +823,9 @@
         {
             "actions": [
                 {
-                    "argument": "",
-                    "dispatcher": "movewindow",
-                    "flags": "m",
+                    "args": {
+                    },
+                    "id": "window.drag",
                     "layouts": [
                     ]
                 }
@@ -774,9 +844,9 @@
         {
             "actions": [
                 {
-                    "argument": "",
-                    "dispatcher": "resizewindow",
-                    "flags": "m",
+                    "args": {
+                    },
+                    "id": "window.resize-drag",
                     "layouts": [
                     ]
                 }
@@ -795,9 +865,9 @@
         {
             "actions": [
                 {
-                    "argument": "playerctl play-pause",
-                    "dispatcher": "exec",
-                    "flags": "",
+                    "args": {
+                    },
+                    "id": "media.play-pause",
                     "layouts": [
                     ]
                 }
@@ -815,9 +885,9 @@
         {
             "actions": [
                 {
-                    "argument": "playerctl previous",
-                    "dispatcher": "exec",
-                    "flags": "",
+                    "args": {
+                    },
+                    "id": "media.prev",
                     "layouts": [
                     ]
                 }
@@ -841,9 +911,9 @@
         {
             "actions": [
                 {
-                    "argument": "playerctl next",
-                    "dispatcher": "exec",
-                    "flags": "",
+                    "args": {
+                    },
+                    "id": "media.next",
                     "layouts": [
                     ]
                 }
@@ -867,9 +937,9 @@
         {
             "actions": [
                 {
-                    "argument": "playerctl play-pause",
-                    "dispatcher": "exec",
-                    "flags": "l",
+                    "args": {
+                    },
+                    "id": "media.play-pause-locked",
                     "layouts": [
                     ]
                 }
@@ -887,9 +957,9 @@
         {
             "actions": [
                 {
-                    "argument": "playerctl stop",
-                    "dispatcher": "exec",
-                    "flags": "l",
+                    "args": {
+                    },
+                    "id": "media.stop-locked",
                     "layouts": [
                     ]
                 }
@@ -907,9 +977,9 @@
         {
             "actions": [
                 {
-                    "argument": "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 10%+",
-                    "dispatcher": "exec",
-                    "flags": "le",
+                    "args": {
+                    },
+                    "id": "audio.volume-up",
                     "layouts": [
                     ]
                 }
@@ -933,9 +1003,9 @@
         {
             "actions": [
                 {
-                    "argument": "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 10%-",
-                    "dispatcher": "exec",
-                    "flags": "le",
+                    "args": {
+                    },
+                    "id": "audio.volume-down",
                     "layouts": [
                     ]
                 }
@@ -959,9 +1029,9 @@
         {
             "actions": [
                 {
-                    "argument": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
-                    "dispatcher": "exec",
-                    "flags": "le",
+                    "args": {
+                    },
+                    "id": "audio.mute-toggle",
                     "layouts": [
                     ]
                 }
@@ -979,9 +1049,9 @@
         {
             "actions": [
                 {
-                    "argument": "ambxst brightness +5",
-                    "dispatcher": "exec",
-                    "flags": "le",
+                    "args": {
+                    },
+                    "id": "brightness.up",
                     "layouts": [
                     ]
                 }
@@ -999,9 +1069,9 @@
         {
             "actions": [
                 {
-                    "argument": "ambxst brightness -5",
-                    "dispatcher": "exec",
-                    "flags": "le",
+                    "args": {
+                    },
+                    "id": "brightness.down",
                     "layouts": [
                     ]
                 }
@@ -1019,9 +1089,9 @@
         {
             "actions": [
                 {
-                    "argument": "notify-send \"Soon\"",
-                    "dispatcher": "exec",
-                    "flags": "",
+                    "args": {
+                    },
+                    "id": "system.calculator",
                     "layouts": [
                     ]
                 }
@@ -1039,9 +1109,9 @@
         {
             "actions": [
                 {
-                    "argument": "",
-                    "dispatcher": "togglespecialworkspace",
-                    "flags": "",
+                    "args": {
+                    },
+                    "id": "workspace.toggle-special",
                     "layouts": [
                     ]
                 }
@@ -1061,9 +1131,9 @@
         {
             "actions": [
                 {
-                    "argument": "special",
-                    "dispatcher": "movetoworkspace",
-                    "flags": "",
+                    "args": {
+                    },
+                    "id": "workspace.move-window-special",
                     "layouts": [
                     ]
                 }
@@ -1083,9 +1153,9 @@
         {
             "actions": [
                 {
-                    "argument": "loginctl lock-session",
-                    "dispatcher": "exec",
-                    "flags": "l",
+                    "args": {
+                    },
+                    "id": "system.lock-locked",
                     "layouts": [
                     ]
                 }
@@ -1103,9 +1173,9 @@
         {
             "actions": [
                 {
-                    "argument": "axctl monitor set-dpms 0 0",
-                    "dispatcher": "exec",
-                    "flags": "l",
+                    "args": {
+                    },
+                    "id": "system.dpms-off",
                     "layouts": [
                     ]
                 }
@@ -1123,9 +1193,9 @@
         {
             "actions": [
                 {
-                    "argument": "axctl monitor set-dpms 0 1",
-                    "dispatcher": "exec",
-                    "flags": "l",
+                    "args": {
+                    },
+                    "id": "system.dpms-on",
                     "layouts": [
                     ]
                 }
@@ -1143,17 +1213,19 @@
         {
             "actions": [
                 {
-                    "argument": "focus u",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "direction": "u"
+                    },
+                    "id": "scrolling.focus",
                     "layouts": [
                         "scrolling"
                     ]
                 },
                 {
-                    "argument": "u",
-                    "dispatcher": "movefocus",
-                    "flags": "",
+                    "args": {
+                        "direction": "u"
+                    },
+                    "id": "window.focus",
                     "layouts": [
                         "dwindle",
                         "master"
@@ -1181,17 +1253,19 @@
         {
             "actions": [
                 {
-                    "argument": "focus d",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "direction": "d"
+                    },
+                    "id": "scrolling.focus",
                     "layouts": [
                         "scrolling"
                     ]
                 },
                 {
-                    "argument": "d",
-                    "dispatcher": "movefocus",
-                    "flags": "",
+                    "args": {
+                        "direction": "d"
+                    },
+                    "id": "window.focus",
                     "layouts": [
                         "master",
                         "dwindle"
@@ -1219,17 +1293,19 @@
         {
             "actions": [
                 {
-                    "argument": "focus l",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "direction": "l"
+                    },
+                    "id": "scrolling.focus",
                     "layouts": [
                         "scrolling"
                     ]
                 },
                 {
-                    "argument": "l",
-                    "dispatcher": "movefocus",
-                    "flags": "",
+                    "args": {
+                        "direction": "l"
+                    },
+                    "id": "window.focus",
                     "layouts": [
                         "dwindle",
                         "master"
@@ -1264,17 +1340,19 @@
         {
             "actions": [
                 {
-                    "argument": "focus r",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "direction": "r"
+                    },
+                    "id": "scrolling.focus",
                     "layouts": [
                         "scrolling"
                     ]
                 },
                 {
-                    "argument": "r",
-                    "dispatcher": "movefocus",
-                    "flags": "",
+                    "args": {
+                        "direction": "r"
+                    },
+                    "id": "window.focus",
                     "layouts": [
                         "master",
                         "dwindle"
@@ -1309,18 +1387,20 @@
         {
             "actions": [
                 {
-                    "argument": "l",
-                    "dispatcher": "movewindow",
-                    "flags": "",
+                    "args": {
+                        "direction": "l"
+                    },
+                    "id": "window.move",
                     "layouts": [
                         "master",
                         "dwindle"
                     ]
                 },
                 {
-                    "argument": "movewindowto l",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "direction": "l"
+                    },
+                    "id": "scrolling.move-window",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1348,18 +1428,20 @@
         {
             "actions": [
                 {
-                    "argument": "r",
-                    "dispatcher": "movewindow",
-                    "flags": "",
+                    "args": {
+                        "direction": "r"
+                    },
+                    "id": "window.move",
                     "layouts": [
                         "dwindle",
                         "master"
                     ]
                 },
                 {
-                    "argument": "movewindowto r",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "direction": "r"
+                    },
+                    "id": "scrolling.move-window",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1387,18 +1469,20 @@
         {
             "actions": [
                 {
-                    "argument": "u",
-                    "dispatcher": "movewindow",
-                    "flags": "",
+                    "args": {
+                        "direction": "u"
+                    },
+                    "id": "window.move",
                     "layouts": [
                         "master",
                         "dwindle"
                     ]
                 },
                 {
-                    "argument": "movewindowto u",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "direction": "u"
+                    },
+                    "id": "scrolling.move-window",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1426,18 +1510,20 @@
         {
             "actions": [
                 {
-                    "argument": "d",
-                    "dispatcher": "movewindow",
-                    "flags": "",
+                    "args": {
+                        "direction": "d"
+                    },
+                    "id": "window.move",
                     "layouts": [
                         "master",
                         "dwindle"
                     ]
                 },
                 {
-                    "argument": "movewindowto d",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "direction": "d"
+                    },
+                    "id": "scrolling.move-window",
                     "layouts": [
                     ]
                 }
@@ -1464,17 +1550,19 @@
         {
             "actions": [
                 {
-                    "argument": "colresize +0.1",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "delta": "+0.1"
+                    },
+                    "id": "scrolling.resize-column",
                     "layouts": [
                         "scrolling"
                     ]
                 },
                 {
-                    "argument": "50 0",
-                    "dispatcher": "resizeactive",
-                    "flags": "",
+                    "args": {
+                        "delta": "50 0"
+                    },
+                    "id": "window.resize",
                     "layouts": [
                         "master",
                         "dwindle"
@@ -1503,17 +1591,19 @@
         {
             "actions": [
                 {
-                    "argument": "colresize -0.1",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "delta": "-0.1"
+                    },
+                    "id": "scrolling.resize-column",
                     "layouts": [
                         "scrolling"
                     ]
                 },
                 {
-                    "argument": "-50 0",
-                    "dispatcher": "resizeactive",
-                    "flags": "",
+                    "args": {
+                        "delta": "-50 0"
+                    },
+                    "id": "window.resize",
                     "layouts": [
                         "master",
                         "dwindle"
@@ -1542,9 +1632,10 @@
         {
             "actions": [
                 {
-                    "argument": "0 50",
-                    "dispatcher": "resizeactive",
-                    "flags": "",
+                    "args": {
+                        "delta": "0 50"
+                    },
+                    "id": "window.resize",
                     "layouts": [
                     ]
                 }
@@ -1571,9 +1662,10 @@
         {
             "actions": [
                 {
-                    "argument": "0 -50",
-                    "dispatcher": "resizeactive",
-                    "flags": "",
+                    "args": {
+                        "delta": "0 -50"
+                    },
+                    "id": "window.resize",
                     "layouts": [
                     ]
                 }
@@ -1600,9 +1692,9 @@
         {
             "actions": [
                 {
-                    "argument": "promote",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                    },
+                    "id": "scrolling.promote",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1623,9 +1715,9 @@
         {
             "actions": [
                 {
-                    "argument": "togglefit",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                    },
+                    "id": "scrolling.toggle-fit",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1646,9 +1738,9 @@
         {
             "actions": [
                 {
-                    "argument": "colresize +conf",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                    },
+                    "id": "scrolling.toggle-full-column",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1669,9 +1761,10 @@
         {
             "actions": [
                 {
-                    "argument": "swapcol l",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "direction": "l"
+                    },
+                    "id": "scrolling.swap-column",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1701,9 +1794,10 @@
         {
             "actions": [
                 {
-                    "argument": "swapcol r",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "direction": "r"
+                    },
+                    "id": "scrolling.swap-column",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1733,9 +1827,10 @@
         {
             "actions": [
                 {
-                    "argument": "movecoltoworkspace 1",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "index": "1"
+                    },
+                    "id": "scrolling.move-column-workspace",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1757,9 +1852,10 @@
         {
             "actions": [
                 {
-                    "argument": "movecoltoworkspace 2",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "index": "2"
+                    },
+                    "id": "scrolling.move-column-workspace",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1781,9 +1877,10 @@
         {
             "actions": [
                 {
-                    "argument": "movecoltoworkspace 3",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "index": "3"
+                    },
+                    "id": "scrolling.move-column-workspace",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1805,9 +1902,10 @@
         {
             "actions": [
                 {
-                    "argument": "movecoltoworkspace 4",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "index": "4"
+                    },
+                    "id": "scrolling.move-column-workspace",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1829,9 +1927,10 @@
         {
             "actions": [
                 {
-                    "argument": "movecoltoworkspace 5",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "index": "5"
+                    },
+                    "id": "scrolling.move-column-workspace",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1853,9 +1952,10 @@
         {
             "actions": [
                 {
-                    "argument": "movecoltoworkspace 6",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "index": "6"
+                    },
+                    "id": "scrolling.move-column-workspace",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1877,9 +1977,10 @@
         {
             "actions": [
                 {
-                    "argument": "movecoltoworkspace 7",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "index": "7"
+                    },
+                    "id": "scrolling.move-column-workspace",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1901,9 +2002,10 @@
         {
             "actions": [
                 {
-                    "argument": "movecoltoworkspace 8",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "index": "8"
+                    },
+                    "id": "scrolling.move-column-workspace",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1925,9 +2027,10 @@
         {
             "actions": [
                 {
-                    "argument": "movecoltoworkspace 9",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "index": "9"
+                    },
+                    "id": "scrolling.move-column-workspace",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1949,9 +2052,10 @@
         {
             "actions": [
                 {
-                    "argument": "movecoltoworkspace 10",
-                    "dispatcher": "layoutmsg",
-                    "flags": "",
+                    "args": {
+                        "index": "10"
+                    },
+                    "id": "scrolling.move-column-workspace",
                     "layouts": [
                         "scrolling"
                     ]
@@ -1973,9 +2077,12 @@
         {
             "actions": [
                 {
-                    "argument": "",
-                    "dispatcher": "togglefloating",
-                    "flags": "",
+                    "args": {
+                        "argument": "",
+                        "dispatcher": "togglefloating",
+                        "flags": ""
+                    },
+                    "id": "legacy.dispatcher",
                     "layouts": [
                     ]
                 }
@@ -1995,72 +2102,88 @@
     "defaultAmbxstBinds": {
         "ambxst": {
             "assistant": {
-                "argument": "ambxst run assistant",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.assistant"
+                },
                 "key": "A",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "clipboard": {
-                "argument": "ambxst run clipboard",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.clipboard"
+                },
                 "key": "V",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "dashboard": {
-                "argument": "ambxst run dashboard",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.dashboard"
+                },
                 "key": "D",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "emoji": {
-                "argument": "ambxst run emoji",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.emoji"
+                },
                 "key": "PERIOD",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "launcher": {
-                "argument": "ambxst run launcher",
-                "dispatcher": "exec",
-                "flags": "r",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.launcher"
+                },
                 "key": "Super_L",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "notes": {
-                "argument": "ambxst run notes",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.notes"
+                },
                 "key": "N",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "tmux": {
-                "argument": "ambxst run tmux",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.tmux"
+                },
                 "key": "T",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "wallpapers": {
-                "argument": "ambxst run wallpapers",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.wallpapers"
+                },
                 "key": "COMMA",
                 "modifiers": [
                     "SUPER"
@@ -2069,9 +2192,11 @@
         },
         "system": {
             "config": {
-                "argument": "ambxst run config",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.config"
+                },
                 "key": "C",
                 "modifiers": [
                     "SUPER",
@@ -2079,9 +2204,11 @@
                 ]
             },
             "lens": {
-                "argument": "ambxst run lens",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.lens"
+                },
                 "key": "A",
                 "modifiers": [
                     "SUPER",
@@ -2089,36 +2216,44 @@
                 ]
             },
             "lockscreen": {
-                "argument": "loginctl lock-session",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "system.lock"
+                },
                 "key": "L",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "overview": {
-                "argument": "ambxst run overview",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.overview"
+                },
                 "key": "TAB",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "powermenu": {
-                "argument": "ambxst run powermenu",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.powermenu"
+                },
                 "key": "ESCAPE",
                 "modifiers": [
                     "SUPER"
                 ]
             },
             "quit": {
-                "argument": "ambxst quit",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.quit"
+                },
                 "key": "B",
                 "modifiers": [
                     "SUPER",
@@ -2127,9 +2262,11 @@
                 ]
             },
             "reload": {
-                "argument": "ambxst reload",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.reload"
+                },
                 "key": "B",
                 "modifiers": [
                     "SUPER",
@@ -2137,9 +2274,11 @@
                 ]
             },
             "screenrecord": {
-                "argument": "ambxst run screenrecord",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.screenrecord"
+                },
                 "key": "R",
                 "modifiers": [
                     "SUPER",
@@ -2147,9 +2286,11 @@
                 ]
             },
             "screenshot": {
-                "argument": "ambxst run screenshot",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.screenshot"
+                },
                 "key": "S",
                 "modifiers": [
                     "SUPER",
@@ -2157,9 +2298,11 @@
                 ]
             },
             "tools": {
-                "argument": "ambxst run tools",
-                "dispatcher": "exec",
-                "flags": "",
+                "action": {
+                    "args": {
+                    },
+                    "id": "ambxst.tools"
+                },
                 "key": "S",
                 "modifiers": [
                     "SUPER"

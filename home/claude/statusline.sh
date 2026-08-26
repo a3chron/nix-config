@@ -25,6 +25,11 @@ sapphire=$(fg 116 199 236)
 lavender=$(fg 180 190 254)
 blue=$(fg 137 180 250)
 peach=$(fg 250 179 135)
+# Pink held back toward the base (#1e1e2e) rather than dimmed with SGR 2, which
+# shares the intensity slot with bold and so can't combine with it. Lets the git
+# marks be bold — which the hollow ◇ needs to carry the same visual weight as
+# the filled ◆ — while still sitting behind the branch name.
+pinkmute=$(fg 191 153 185)
 red=$(fg 243 139 168)
 overlay0=$(fg 108 112 134)
 
@@ -66,15 +71,17 @@ if branch=$(git --no-optional-locks -C "$cwd" symbolic-ref --quiet --short HEAD 
   # about whether the work has left the machine, which is the more useful thing
   # to know. Stays silent when there's no upstream at all (fresh branch,
   # detached HEAD) rather than implying a synced zero.
+  # Bold, but in the muted pink, so ◇ reads as solidly as ◆ without competing
+  # with the branch name itself.
+  marks="${pinkmute}${b}${mark}${r}" markp=$mark
+
   ahead=$(git --no-optional-locks -C "$cwd" rev-list --count '@{upstream}..HEAD' 2>/dev/null)
   if [ -n "$ahead" ] && [ "$ahead" -gt 0 ] 2>/dev/null; then
-    mark+=" ↑${ahead}"
+    # The counter stays a quiet trailing detail, like the model's dimmed "1M".
+    marks+=" ${pink}${d}↑${ahead}${r}" markp+=" ↑${ahead}"
   fi
 
-  # Same shape as the model segment: one hue for the whole element, bold for the
-  # value, dim for the trailing detail — no reset in between, so the marks read
-  # as part of the branch rather than as their own segment.
-  push "${pink}${b}${branch} ${d}${mark}${r}" "$branch $mark" 8
+  push "${pink}${b}${branch}${r} ${marks}" "$branch $markp" 8
 fi
 
 # --- model ---------------------------------------------------------------

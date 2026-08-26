@@ -57,9 +57,9 @@ if branch=$(git --no-optional-locks -C "$cwd" symbolic-ref --quiet --short HEAD 
   # they sit with the box-drawing rule, and the fill carries the state on its
   # own — colour alone would be lost to a colourblind reader or a plain log.
   if [ -n "$(git --no-optional-locks -C "$cwd" status --porcelain 2>/dev/null | head -1)" ]; then
-    mark="${teal}${b}◆${r}" markp='◆'
+    mark='◆'
   else
-    mark="${teal}${d}◇${r}" markp='◇'
+    mark='◇'
   fi
 
   # Commits on HEAD that aren't on its upstream yet. A clean tree says nothing
@@ -68,10 +68,13 @@ if branch=$(git --no-optional-locks -C "$cwd" symbolic-ref --quiet --short HEAD 
   # detached HEAD) rather than implying a synced zero.
   ahead=$(git --no-optional-locks -C "$cwd" rev-list --count '@{upstream}..HEAD' 2>/dev/null)
   if [ -n "$ahead" ] && [ "$ahead" -gt 0 ] 2>/dev/null; then
-    mark+=" ${peach}↑${ahead}${r}"; markp+=" ↑${ahead}"
+    mark+=" ↑${ahead}"
   fi
 
-  push "${pink}${b}${branch}${r} ${mark}" "$branch $markp" 8
+  # Same shape as the model segment: one hue for the whole element, bold for the
+  # value, dim for the trailing detail — no reset in between, so the marks read
+  # as part of the branch rather than as their own segment.
+  push "${pink}${b}${branch} ${d}${mark}${r}" "$branch $mark" 8
 fi
 
 # --- model ---------------------------------------------------------------

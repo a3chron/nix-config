@@ -1,5 +1,22 @@
 { config, pkgs, lib, ... }:
 
+let
+	# Claude Code status line. Kept as a plain script in the repo so it can be
+	# run/edited standalone (`echo '{}' | ./home/claude/statusline.sh`), but
+	# wrapped here so jq/git/tput resolve from the store instead of $PATH —
+	# Claude spawns it with a minimal environment, and a missing jq degrades
+	# silently into a blank line rather than an error.
+	#
+	# NOTE: deliberately writeShellScriptBin and not writeShellApplication.
+	# The latter injects `set -euo pipefail`, and the script leans on trailing
+	# `[ test ] && assignment` idioms whose non-zero exit is meaningful, not
+	# fatal — under `set -e` the first colour threshold that doesn't match
+	# would kill the whole status line.
+	claudeStatusline = pkgs.writeShellScriptBin "claude-statusline" ''
+		export PATH=${lib.makeBinPath (with pkgs; [ jq git ncurses coreutils ])}''${PATH:+:}$PATH
+		${builtins.readFile ./claude/statusline.sh}
+	'';
+in
 {
   home.username = "a3chron";
   home.homeDirectory = "/home/a3chron";
@@ -272,6 +289,31 @@
 	# Populate hyperland config
 		home.file.".config/hypr/hyprland.conf".source = ./hyprland.conf;
 
+	# Claude Code status line: stable path, store-backed content.
+	# Symlinking to a fixed ~/.claude path (rather than pointing settings.json
+	# straight at the store) keeps the store hash out of settings.json, so a
+	# rebuild + GC can't leave the setting dangling.
+	home.file.".claude/statusline.sh".source = "${claudeStatusline}/bin/claude-statusline";
+
+	# settings.json is read-write for Claude itself (/config writes model, theme,
+	# effort back to it), so it can't be a read-only nix symlink. Merge just the
+	# statusLine key in and leave every other key untouched.
+	home.activation.claudeStatusline = lib.hm.dag.entryAfter ["writeBoundary"] ''
+		settings="$HOME/.claude/settings.json"
+		mkdir -p "$HOME/.claude"
+		[ -s "$settings" ] || echo '{}' > "$settings"
+
+		tmp=$(mktemp)
+		if ${pkgs.jq}/bin/jq --arg cmd "$HOME/.claude/statusline.sh" \
+				'.statusLine = { type: "command", command: $cmd, padding: 0 }' \
+				"$settings" > "$tmp" 2>/dev/null; then
+			cat "$tmp" > "$settings"
+		else
+			echo "warning: $settings is not valid JSON, leaving statusLine unset" >&2
+		fi
+		rm -f "$tmp"
+	'';
+
 	# Ambxst config - conditional copy (only if dir doesn't exist)
 	# This keeps config declarative but allows in-app changes
 	home.activation.ambxstConfig = lib.hm.dag.entryAfter ["writeBoundary"] ''
@@ -289,6 +331,7 @@
   home.packages = with pkgs; [
     # basics
     starship
+    jq          # was only ever in ~/.nix-profile; the Claude status line needs it
     vscodium
     vlc
     vicinae

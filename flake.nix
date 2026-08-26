@@ -30,6 +30,10 @@
         {
           home-manager.useGlobalPkgs = true;
           home-manager.useUserPackages = true;
+          # Without this, activation aborts whenever a file home-manager wants to
+          # own already exists unmanaged (e.g. ~/.claude/statusline.sh created by
+          # hand). Move it aside instead of failing the whole rebuild.
+          home-manager.backupFileExtension = "hm-bak";
           home-manager.users.a3chron =
             import ./home/a3chron.nix;
         }

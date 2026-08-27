@@ -155,6 +155,14 @@
 		portalPackage = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.xdg-desktop-portal-hyprland;
 	};
 
+	# nixpkgs 25.11's programs.hyprland hardcodes binPath to the raw compositor
+	# binary, so uwsm launches Hyprland directly and 0.55 warns that it was
+	# "started without start-hyprland" (losing the watchdog's crash auto-restart
+	# and its nixGL check). Fixed upstream in nixpkgs 26.05, where binPath
+	# already points at start-hyprland — drop this override on that channel bump.
+	programs.uwsm.waylandCompositors.hyprland.binPath =
+		lib.mkForce "/run/current-system/sw/bin/start-hyprland";
+
 	# Use mesa from Hyprland's nixpkgs to avoid version mismatch on stable NixOS
 	hardware.graphics = let
 		pkgs-unstable = inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};

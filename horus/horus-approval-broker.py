@@ -75,6 +75,39 @@ SECURITY POSTURE — read before adding anything
     for a registered session that this broker did not cause, and that is not
     explainable as a cascade, raises horus-alert.
 
+ALERTING WHILE PAUSED (fixed 2026-08-27)
+    `horus pause` stops container@horus, which takes opencode-server and this
+    broker's event stream with it. The dead-SSE detector originally read that
+    as a catastrophe and alerted on the 10/20/40-minute backoff for the whole
+    pause: the 54-minute pause that morning (09:04–09:58) cost three WhatsApp +
+    desktop alerts, and in the next episode one landed 46 seconds before Kurt
+    resumed — the alarm going off as he walked back in. It also kept the
+    accumulated pause duration on the clock, so the first poll after `horus
+    resume` alerted about "no event stream for 3420s" while opencode-server was
+    simply still booting (it needs ~14s).
+
+    So the detector now consults stack_paused() and stays silent while the
+    container is deliberately down, sliding its own down-timer through the
+    pause and starting a fresh grace period the moment the container is seen
+    back. What it must still do — verify this after any edit here — is alert
+    when the container is UP and the server is dead, which is the 2026-08-11
+    failure (opencode-server could not start, missing EnvironmentFile). To
+    check it by hand, point a throwaway instance at a dead port while the
+    container runs:
+
+      env HORUS_BROKER_ALERTS=0 HORUS_BROKER_PORT=8799 HORUS_BROKER_WA_TAIL=0
+          HORUS_BROKER_STATE=/tmp/t.json
+          HORUS_OPENCODE_URL=http://127.0.0.1:4999
+          HORUS_BROKER_SSE_DOWN_ALERT=2 HORUS_BROKER_SSE_TIMEOUT=2
+          python horus-approval-broker.py
+
+    (one shell line; the port and state file are overridden so it cannot
+    collide with the real broker). It must log "no event stream" within
+    seconds. Then add HORUS_CONTAINER_UNIT=<any loaded-but-inactive unit, e.g.
+    emergency.service> to fake a pause: the same run must go silent.
+    Any future edit here has to keep the container-up case loud; a
+    silent broker is indistinguishable from a working one until Kurt needs it.
+
 PHASE 2 SCOPE
     Nothing is migrated. bridge/server.js and ask-horus.sh still use
     `opencode run` and never talk to this broker. It is exercised by hand (see
@@ -149,6 +182,16 @@ CASCADE_WINDOW_SEC = float(os.environ.get("HORUS_BROKER_CASCADE_WINDOW", "10"))
 # Measured SSE heartbeat is ~10.6s, so 30s of silence really is a dead stream.
 SSE_READ_TIMEOUT = int(os.environ.get("HORUS_BROKER_SSE_TIMEOUT", "30"))
 SSE_DOWN_ALERT_SEC = int(os.environ.get("HORUS_BROKER_SSE_DOWN_ALERT", "60"))
+# The unit `horus pause` stops. When it is deliberately down, a dead event
+# stream is expected and must not alert — see stack_paused(). Absolute path
+# because systemd.user services get a minimal PATH (the same reason the horus
+# python scripts spell out sudo/machinectl); approval.nix does add pkgs.systemd
+# to the unit's path, so this is belt and braces for hand-runs from a shell.
+CONTAINER_UNIT = os.environ.get("HORUS_CONTAINER_UNIT", "container@horus.service")
+SYSTEMCTL = "/run/current-system/sw/bin/systemctl"
+# How often to re-probe while the stack is paused. Also the worst-case delay
+# between `horus resume` finishing and approvals working again (see sse_loop).
+PAUSED_POLL_SEC = int(os.environ.get("HORUS_BROKER_PAUSED_POLL", "5"))
 # Repeat spacing for Server.alert(), per key: first is immediate, then 10min,
 # 20, 40 … capped. Reset when the condition clears (see sse_loop).
 ALERT_BACKOFF_START = float(os.environ.get("HORUS_BROKER_ALERT_BACKOFF", "600"))
@@ -238,6 +281,48 @@ def log(level: str, msg: str) -> None:
 
 def hhmm(epoch: float) -> str:
     return time.strftime("%H:%M", time.localtime(epoch))
+
+
+def stack_paused() -> bool:
+    """True when the container holding opencode-server is down ON PURPOSE.
+
+    `horus pause` stops container@horus, and opencode-server dies with it, so
+    the event stream this broker lives on goes away by design. Without this
+    check the dead-SSE detector reads a deliberate pause as a catastrophic
+    failure and alerts Kurt about it every 10/20/40 minutes for the whole
+    pause — which is exactly what it did until 2026-08-27 (a 54-minute pause
+    that morning cost three WhatsApp + desktop alerts). Same rule, and the
+    same wording, as wa-watch.nix: never nag about the thing Kurt just asked
+    for.
+
+    Deliberately keyed on "inactive", not "not active": container@horus is
+    Restart=on-failure, so a container that crashed for good lands in
+    "failed", and that we DO want to shout about. `activating` counts as
+    paused-ish too — it's the resume window, one poll wide.
+
+    LoadState is checked, not just ActiveState, because `systemctl is-active`
+    answers "inactive" for a unit that DOES NOT EXIST. Keying on that alone
+    would mean a future rename of container@horus silently switches this
+    broker's only failure alarm off forever — the worst possible failure mode
+    for this function. not-found is therefore treated as "not paused" (keep
+    alerting) plus a loud log line.
+    """
+    try:
+        out = subprocess.run(
+            [SYSTEMCTL, "show", "-p", "LoadState", "-p", "ActiveState", "--value", CONTAINER_UNIT],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.split()
+    except Exception as exc:
+        # Can't tell → assume running, i.e. keep alerting. A broken probe must
+        # never be able to silence the only warning that approvals are dead.
+        log("warn", f"could not read {CONTAINER_UNIT} state: {exc}")
+        return False
+    load, active = (out + ["", ""])[:2]
+    if load != "loaded":
+        log("warn", f"{CONTAINER_UNIT} is {load or 'unreadable'} — cannot tell a pause from a "
+                    f"failure, so alerts stay ON. Fix CONTAINER_UNIT in this script.")
+        return False
+    return active in ("inactive", "deactivating", "activating")
 
 
 # --------------------------------------------------------------------------
@@ -557,6 +642,9 @@ class Broker:
         self.sse_connected = False
         self.sse_last_event = 0.0
         self.sse_down_since = now()
+        # "the stream is down because Kurt paused the stack" — written only by
+        # the sse thread, and only to keep the pause quiet in the journal
+        self.sse_paused = False
         self.stop = threading.Event()
         self._alerts = {}
 
@@ -1234,6 +1322,7 @@ class Broker:
                     with self.lock:
                         self.sse_connected = True
                         self.sse_last_event = now()
+                        self.sse_paused = False
                         # the condition cleared — re-arm, so the NEXT outage is
                         # reported immediately instead of after the grown backoff
                         self._alerts.pop("sse-down", None)
@@ -1259,7 +1348,9 @@ class Broker:
                         except Exception as exc:
                             log("error", f"event handler raised: {exc!r}")
             except Exception as exc:
-                if not self.stop.is_set():
+                # While paused this fires every 30s for the whole pause, so it
+                # is logged once per episode instead (see below).
+                if not self.stop.is_set() and not self.sse_paused:
                     log("warn", f"SSE disconnected: {exc}")
             with self.lock:
                 if self.sse_connected:
@@ -1267,13 +1358,53 @@ class Broker:
                 self.sse_connected = False
             if self.stop.is_set():
                 return
-            down = now() - self.sse_down_since
-            if down > SSE_DOWN_ALERT_SEC:
-                self.alert(
-                    "sse-down",
-                    f"approval broker has had no event stream from opencode for {int(down)}s — "
-                    f"remote approvals are NOT working and pending ones cannot be answered.",
-                )
+            if stack_paused():
+                with self.lock:
+                    # Slide the down-timer through the pause. Without this the
+                    # accumulated pause duration is still on the clock at the
+                    # moment the container comes back, so the FIRST poll after
+                    # `horus resume` alerts immediately ("no event stream for
+                    # 3420s") even though opencode-server is simply still
+                    # booting — it needs ~14s. Resetting here gives it a fresh
+                    # SSE_DOWN_ALERT_SEC grace period from resume, and a real
+                    # server that never comes back still alerts, just 60s later.
+                    self.sse_down_since = now()
+                    # Re-arm the backoff too: a genuine outage AFTER the pause
+                    # deserves an immediate first alert, not the grown wait.
+                    self._alerts.pop("sse-down", None)
+                if not self.sse_paused:
+                    self.sse_paused = True
+                    log("info", f"{CONTAINER_UNIT} is down (paused) — event stream is expected "
+                                f"to be gone; retrying quietly, no alerts until it is back")
+                # Hold the retry interval at PAUSED_POLL_SEC instead of letting
+                # it grow to 30s. The growth is right for a server that might be
+                # overloaded, but a paused container is not overloaded — it is
+                # simply absent, and the cost of asking again is one refused TCP
+                # connect. Left to grow, the loop could still be inside a 30s
+                # sleep when `horus resume` finishes, leaving remote approvals
+                # dead for half a minute after the stack is nominally back.
+                backoff = PAUSED_POLL_SEC
+            else:
+                if self.sse_paused:
+                    self.sse_paused = False
+                    with self.lock:
+                        # Start the clock HERE, at the poll that first sees the
+                        # container back, so opencode-server gets a full
+                        # SSE_DOWN_ALERT_SEC to boot regardless of how long ago
+                        # the last paused poll ran. Resetting only in the paused
+                        # branch would shorten the grace by up to
+                        # PAUSED_POLL_SEC, which is fine at 60s/5s but stops
+                        # being fine the moment either is retuned.
+                        self.sse_down_since = now()
+                    log("info", f"{CONTAINER_UNIT} is back — event stream expected again, "
+                                f"giving opencode-server {SSE_DOWN_ALERT_SEC}s to come up")
+                down = now() - self.sse_down_since
+                if down > SSE_DOWN_ALERT_SEC:
+                    self.alert(
+                        "sse-down",
+                        f"approval broker has had no event stream from opencode for {int(down)}s — "
+                        f"remote approvals are NOT working and pending ones cannot be answered.",
+                    )
             self.stop.wait(backoff)
             backoff = min(backoff * 2, 30)
 
@@ -1406,6 +1537,8 @@ class Broker:
                 "version": VERSION,
                 "sse": {
                     "connected": self.sse_connected,
+                    # true = down because the stack is paused, not because it broke
+                    "paused": self.sse_paused,
                     "lastEventSecAgo": int(now() - self.sse_last_event) if self.sse_last_event else None,
                 },
                 "sessions": [

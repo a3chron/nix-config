@@ -5,7 +5,7 @@
 { config, pkgs, lib, inputs, ... }:
 
 {
-	imports = [ ./hardware-config-pc.nix ./horus ];
+	imports = [ ./hardware-config-pc.nix ./horus ./chronogrid.nix ];
 
 	swapDevices = lib.mkForce [
 		{

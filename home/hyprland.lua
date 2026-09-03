@@ -305,6 +305,31 @@ end
 -- OVERRIDES
 -- Down here you can write or load anything that you want to override from Ambxst's settings.
 
+-----------------
+---- LAUNCHER ----
+-----------------
+
+-- Hyprland 0.56 regression for "launcher on Super alone". ambxst generates
+--     hl.bind("SUPER + Super_L", hl.dsp.exec_cmd("ambxst run launcher"))
+-- a plain press bind on the modifier key itself. On 0.55 the modifier state
+-- did not yet include SUPER while Super_L's own press was evaluated (see the
+-- bindr comment in KeybindManager.cpp), so that bind could only ever match on
+-- release, and Hyprland's bind shadowing cancelled it whenever another key
+-- was pressed in between. On 0.56 the state already includes SUPER, so the
+-- bind matches the instant Super goes down -- before the number key -- and
+-- SUPER+<n> opens the launcher on top of switching workspaces.
+--
+-- Fix: make it a release bind (the legacy `bindr`). That is in fact what
+-- ~/.local/share/ambxst/axctl.toml asks for -- the launcher keybind there has
+-- `flags = "r"` -- but axctl 0.0.16 drops the flag in both its ConfigGenerator
+-- (`bind =`, not `bindr =`) and its LuaGenerator (no `{ release = true }`).
+-- Verified 2026-09-03 with an injected uinput keyboard: SUPER+2 fires only the
+-- workspace switch, Super alone fires only the launcher. hl.unbind removes
+-- every bind on that key, so ambxst's press-mode one goes away first.
+hl.unbind("SUPER + Super_L")
+hl.bind("SUPER + Super_L", hl.dsp.exec_cmd("ambxst run launcher"), { release = true })
+
+
 --------------
 ---- RESIZE --
 --------------
@@ -342,14 +367,12 @@ hl.bind(mainMod .. " + ALT + k",     resizeBy(0, -50))
 -- See https://wiki.hypr.land/Configuring/Basics/Window-Rules/
 -- and https://wiki.hypr.land/Configuring/Basics/Workspace-Rules/
 
--- Workspace 1: all windows float by default
-hl.window_rule({
-    name  = "float-on-workspace-1",
-    match = { workspace = "1" },
-    float = true,
-})
+-- Workspace 1 used to float every window by default (`float on, match:workspace 1`).
+-- Dropped on 2026-09-03 -- workspace 1 is a normal tiling workspace now.
 
--- Full-width sizing for specific apps only (whitelist)
+-- Full-width sizing for specific apps (whitelist). size/move only ever apply to
+-- floating windows, so with workspace 1 tiling again these only kick in when
+-- one of these apps is floated by hand.
 -- Monitor: 1920x1200, reserved top: 40px (bar), 6px edge padding
 hl.window_rule({
     name  = "zen-full-width",

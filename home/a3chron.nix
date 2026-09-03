@@ -362,7 +362,11 @@ in
 		freecad
     neofetch
 		bagels
-    steam
+    # steam is NOT listed here on purpose: programs.steam (configuration.nix)
+    # installs it system-wide with the libdrm fix for the FHS sandbox. A plain
+    # pkgs.steam here lands in /etc/profiles/per-user, which shadows the fixed
+    # one on PATH -- that is exactly what kept Steam crashing on 2026-09-03
+    # after the fix was already active in the system generation.
 		kdePackages.kdenlive
 		nerd-fonts.jetbrains-mono
   ];

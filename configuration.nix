@@ -187,6 +187,33 @@
     enable = true;
     remotePlay.openFirewall = false;
     dedicatedServer.openFirewall = false;
+
+    # Steam runs inside nixpkgs' FHS sandbox, whose /lib and /lib32 are built
+    # from *stable* nixpkgs -- including stable libdrm. But hardware.graphics
+    # above puts *unstable* mesa (from Hyprland's nixpkgs) into that same
+    # sandbox, and mesa 26.2.1 needs a libdrm_amdgpu symbol
+    # (amdgpu_va_manager_query_sw_info) that only exists in libdrm >= 2.4.13x.
+    # Normally mesa would find its own libdrm through RUNPATH, but Steam's scout
+    # runtime (ubuntu12_32/steam-runtime/run.sh) puts /lib:/lib32 on
+    # LD_LIBRARY_PATH, which beats RUNPATH, so the stable libdrm shadows it:
+    # 32-bit libgallium fails to load, GL falls back to llvmpipe, and the Steam
+    # client dies with "glXChooseVisual failed". Diagnosed 2026-09-03 after the
+    # mesa 26.1.3 -> 26.2.1 bump; mesa 26.1.3 did not need the symbol yet.
+    #
+    # Fix: ship the libdrm mesa was actually built against into the sandbox.
+    # hiPrio is required -- the sandbox is a buildEnv, and on a collision the
+    # first package (stable libdrm, listed in steam's own multiPkgs) wins
+    # unless something has a higher priority. The nixos steam module preserves
+    # this extraLibraries and appends hardware.graphics.package{,32} after it.
+    package = let
+      pkgs-unstable = inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+    in pkgs.steam.override {
+      extraLibraries = p: [
+        (lib.hiPrio (if p.stdenv.hostPlatform.is64bit
+          then pkgs-unstable.libdrm
+          else pkgs-unstable.pkgsi686Linux.libdrm))
+      ];
+    };
   };
 
   # Install firefox.

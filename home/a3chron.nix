@@ -286,8 +286,17 @@ in
 	home.file.".config/gtk-3.0/custom-window-buttons.css".source = ./window-buttons.css;
 	home.file.".config/gtk-4.0/custom-window-buttons.css".source = ./window-buttons.css;
 
-	# Populate hyperland config
-		home.file.".config/hypr/hyprland.conf".source = ./hyprland.conf;
+	# Populate hyprland config.
+	#
+	# Lua, not .conf: Hyprland 0.56 dropped the legacy hyprland.conf format
+	# entirely (it is Lua-only), and 0.55 already prefers hyprland.lua whenever
+	# one exists. Letting home-manager own this path also stops Hyprland from
+	# autogenerating a stock hyprland.lua over it -- which is exactly what
+	# happened on 2026-09-03: the 0.56 bump wrote its own default config into
+	# ~/.config/hypr/hyprland.lua, that file shadowed hyprland.conf, and because
+	# it lives in $HOME rather than the system generation, rolling back to 0.55
+	# did not get rid of it. The store symlink is read-only, so it can't recur.
+		home.file.".config/hypr/hyprland.lua".source = ./hyprland.lua;
 
 	# Claude Code status line: stable path, store-backed content.
 	# Symlinking to a fixed ~/.claude path (rather than pointing settings.json

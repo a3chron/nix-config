@@ -36,8 +36,15 @@ local fileManager = "nautilus"
 -------------------
 
 -- See https://wiki.hypr.land/Configuring/Basics/Autostart/
+--
+-- ambxst is NOT exec'd here any more. Since 2026-09-03 it runs as the
+-- `ambxst.service` systemd user unit (home/a3chron.nix), pulled in by
+-- graphical-session.target, so it gets restarted when it dies. It used to die
+-- on monitor power-off: the Fujitsu drops the HDMI link, Hyprland removes the
+-- output, and the resulting Wayland protocol error is fatal for quickshell --
+-- leaving the bare grey "hypr just better" screen with no bar and no launcher.
+-- (The ambxst-generated startup hook is filtered out in the AMBXST section.)
 hl.on("hyprland.start", function()
-    hl.exec_cmd("ambxst")
 end)
 
 
@@ -145,6 +152,23 @@ hl.config({
     misc = {
         force_default_wallpaper = -1,   -- Set to 0 or 1 to disable the anime mascot wallpapers
         disable_hyprland_logo   = true, -- If true disables the random hyprland logo / anime girl background. :(
+        -- The ambxst lockscreen lives inside quickshell. When Hyprland kills
+        -- quickshell during a monitor power-off (see ambxst.service in
+        -- a3chron.nix), the ext-session-lock client is gone; with this off,
+        -- Hyprland keeps the session locked behind a dead red screen that no
+        -- restarted locker may take over. With it on, the restarted ambxst
+        -- can lock again and the session stays usable *and* locked.
+        allow_session_lock_restore = true,
+    },
+
+    debug = {
+        -- Hyprland-level logging (default off leaves only aquamarine's backend
+        -- chatter in hyprland.log). Turned on 2026-09-05 to capture what
+        -- Hyprland 0.56 does to client resources when HDMI-A-2 drops and
+        -- returns -- clients die with "unknown object (N), message attach"
+        -- protocol errors on nearly every screen power-off since 0.56.0.
+        -- Turn back off once that is reported/fixed upstream.
+        disable_logs = false,
     },
 })
 
@@ -290,10 +314,24 @@ local function warnOnScreen(msg)
     hl.notification.create({ text = msg, time = 10000 })
 end
 
+-- The generated file also registers `hl.on("hyprland.start", exec "ambxst")`.
+-- That comes from `[startup] exec-once = "ambxst"` in axctl.toml, which
+-- ambxst's TOML writer hardcodes and rewrites on every launch, so it cannot be
+-- switched off in config. ambxst is started by ambxst.service instead (see
+-- AUTOSTART), and a second launch replaces the running instance -- which would
+-- race with the service at login. So while running the chunk, hl.on is shadowed
+-- to swallow its hyprland.start registration (the only one it makes) and pass
+-- everything else through unchanged.
 local ambxstConfig = os.getenv("HOME") .. "/.local/share/ambxst/hyprland.lua"
 local ambxstChunk, ambxstLoadErr = loadfile(ambxstConfig)
 if ambxstChunk then
+    local realOn = hl.on
+    hl.on = function(event, ...)
+        if event == "hyprland.start" then return end
+        return realOn(event, ...)
+    end
     local ok, runErr = pcall(ambxstChunk)
+    hl.on = realOn
     if not ok then
         warnOnScreen("ambxst hyprland.lua failed: " .. tostring(runErr))
     end
@@ -304,6 +342,17 @@ end
 
 -- OVERRIDES
 -- Down here you can write or load anything that you want to override from Ambxst's settings.
+
+-- Re-assert allow_session_lock_restore AFTER the ambxst chunk. ambxst rewrites
+-- the compositor config and triggers a Hyprland reload on every launch (its
+-- CompositorTomlWriter), and each of those reloads re-runs this whole file. The
+-- setting in the misc block above already survives that today because ambxst's
+-- generated config does not touch this key, but ambxst restarts constantly (on
+-- every output-loss crash, via ambxst.service), so keep the guarantee here too:
+-- if the locker dies while the session is locked, this is what lets the
+-- restarted ambxst re-attach and take over instead of leaving Hyprland stuck on
+-- the red "your lockscreen app died" screen with no client able to unlock it.
+hl.config({ misc = { allow_session_lock_restore = true } })
 
 -----------------
 ---- LAUNCHER ----

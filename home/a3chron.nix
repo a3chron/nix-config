@@ -261,6 +261,49 @@ in
 		};
 	};
 
+	# ambxst (the quickshell desktop shell: bar, launcher, wallpaper, lockscreen)
+	# as a supervised unit instead of a Hyprland exec at startup.
+	#
+	# Why: 2026-09-03, monitor powered off and back on. This Fujitsu drops the
+	# HDMI link when it powers off, Hyprland removes its only output, and the
+	# Wayland protocol error that followed was fatal for quickshell (and Zen).
+	# Hyprland itself survived, so the result was the bare grey "hypr just
+	# better" fallback: mouse only, no bar, no wallpaper, and every SUPER bind
+	# apparently dead because they all `ambxst run ...`. Restart=always brings
+	# it back within seconds. Stop it for real with `systemctl --user stop ambxst`
+	# (`ambxst quit` alone will just be undone by the restart).
+	#
+	# ambxst is installed imperatively (`nix profile install github:a3chron/ambxst-a3`),
+	# hence the ~/.nix-profile path rather than a pkgs reference.
+	# home/hyprland.lua no longer execs it and filters the exec that ambxst's
+	# generated config insists on, so this unit is the single launcher.
+	# The environment (WAYLAND_DISPLAY, HYPRLAND_INSTANCE_SIGNATURE) reaches the
+	# user manager through uwsm, same as vicinae above; the Condition keeps it
+	# from starting under a non-Hyprland session (e.g. the GNOME fallback).
+	systemd.user.services.ambxst = {
+		Unit = {
+			Description = "ambxst desktop shell (quickshell)";
+			After = [ "graphical-session.target" ];
+			PartOf = [ "graphical-session.target" ];
+			ConditionEnvironment = "HYPRLAND_INSTANCE_SIGNATURE";
+			# A broken ambxst/quickshell config crashes within a second; cap the
+			# loop instead of hammering the compositor forever.
+			StartLimitIntervalSec = 60;
+			StartLimitBurst = 5;
+		};
+
+		Service = {
+			ExecStart = "%h/.nix-profile/bin/ambxst";
+			Restart = "always";
+			RestartSec = 2;
+			Slice = "app-graphical.slice";
+		};
+
+		Install = {
+			WantedBy = [ "graphical-session.target" ];
+		};
+	};
+
   dconf.settings = {
 		"org/gnome/settings-daemon/plugins/media-keys" = {
 			custom-keybindings = [

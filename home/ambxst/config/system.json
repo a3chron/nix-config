@@ -17,11 +17,6 @@
             {
                 "onTimeout": "loginctl lock-session",
                 "timeout": 300
-            },
-            {
-                "onResume": "ambxst screen on",
-                "onTimeout": "ambxst screen off",
-                "timeout": 330
             }
         ]
     },

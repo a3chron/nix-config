@@ -18,6 +18,25 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
+  # ==== Keep HDMI-A-2 alive across monitor power-off / DPMS ====
+  # The Fujitsu P24-8 drops the HDMI hotplug line whenever it powers off (power
+  # button or ambxst DPMS). Hyprland 0.56 then removes the output and its
+  # fallback-output churn destroys client wl_surfaces, killing every window,
+  # the ambxst bar and the lockscreen ("unknown object, message attach").
+  #
+  # Force the connector permanently "connected" (video=HDMI-A-2:e / DRM_FORCE_ON).
+  # The DRM core then never emits a disconnect uevent for it, and amdgpu keeps an
+  # emulated sink when the physical monitor goes dark, so Hyprland never sees the
+  # output vanish and nothing gets torn down. Takes effect only after a reboot.
+  #
+  # NOTE: deliberately no drm.edid_firmware here yet. amdgpu is known to fail the
+  # early edid_firmware load on NixOS (err=-2), and a failed EDID can force the
+  # connector OFF -> black screen at boot. When the monitor is present amdgpu
+  # reads the real EDID over DDC anyway; only add a firmware EDID (captured blob
+  # for this panel exists) if the resolution misbehaves *while the monitor is
+  # off*, and verify dmesg shows no "Requesting EDID firmware failed".
+  hardware.display.outputs."HDMI-A-2".mode = "e";
+
 
 	# ==== Fans ====
 	boot.extraModulePackages = with config.boot.kernelPackages; [ nct6687d ];

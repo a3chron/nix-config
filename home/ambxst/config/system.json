@@ -1,4 +1,7 @@
 {
+    "clipboard": {
+        "tmpfs": false
+    },
     "disks": [
         "/"
     ],

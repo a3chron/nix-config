@@ -48,7 +48,7 @@ let
 					# key on the episode so a re-pair + later re-logout alerts again
 					at=$(printf '%s' "$body" | jq -r '.loggedOutAt // "?"' 2>/dev/null || echo "?")
 					key="logged-out:$at"
-					msg="Pairing revoked — Horus can't hear you and won't retry. Re-pair: rm -rf ~/horus/wa-auth && sudo systemctl restart container@horus.service, then scan the QR in ~/horus/bridge/bridge.log"
+					msg="Pairing revoked — Horus can't hear you and won't retry. Re-pair: run \`horus wa-connect\` in a terminal and scan the QR it shows"
 					;;
 				*)
 					exit 0

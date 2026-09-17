@@ -1,4 +1,4 @@
-# The `horus` CLI: chat (default) / pause / resume / cancel / status.
+# The `horus` CLI: chat (default) / pause / resume / cancel / status / log / wa-connect / grant / revoke.
 # Narrow NOPASSWD sudo rules make pause/resume instant for a3chron.
 { config, pkgs, lib, ... }:
 
@@ -47,11 +47,10 @@ let
 						# genuine logout (creds revoked server-side) — retrying is pointless,
 						# only a re-pair helps; don't dress this up as an offline blip
 						echo "whatsapp: LOGGED OUT — the pairing was revoked, the bridge will NOT retry."
-						echo "whatsapp: re-pair: rm -rf ~/horus/wa-auth && sudo systemctl restart container@horus.service,"
-						echo "whatsapp: then scan the QR from ~/horus/bridge/bridge.log with the agent's phone"
+						echo "whatsapp: re-pair with: horus wa-connect  (wipes wa-auth, restarts the bridge, shows the QR)"
 						;;
 					waiting-for-qr-scan)
-						echo "whatsapp: waiting for QR scan — scan the QR in ~/horus/bridge/bridge.log with the agent's phone"
+						echo "whatsapp: waiting for QR scan — run: horus wa-connect  (shows the current QR, refreshes as it rotates)"
 						;;
 					*)
 						echo "whatsapp: ''${st:-bridge unreachable} — offline? bridge keeps retrying and catches up once online"
@@ -136,9 +135,10 @@ let
 						+ (if .running then " — answering now" elif (.pending // 0) > 0 then " — \(.pending) queued" else "" end)
 						+ (if .status != "connected" and .lastCloseReason then " — last close \(.lastCloseReason)" else "" end)
 						+ (if .status != "connected" and .lastConnectedAt then ", last connected \(.lastConnectedAt)" else "" end)')"
-					if [ "$(echo "$wa" | jq -r '.status')" = "logged-out" ]; then
-						printf 'whatsapp:   %s\n' "re-pair needed: rm -rf ~/horus/wa-auth, restart container, scan QR from bridge.log"
-					fi
+					case "$(echo "$wa" | jq -r '.status')" in
+						logged-out)          printf 'whatsapp:   %s\n' "re-pair needed: horus wa-connect" ;;
+						waiting-for-qr-scan) printf 'whatsapp:   %s\n' "scan needed: horus wa-connect shows the QR" ;;
+					esac
 				else
 					printf 'whatsapp:   %s\n' "unreachable (container down?)"
 				fi
@@ -204,6 +204,15 @@ let
 				# runs from the repo path (impure by design) so tweaks need no rebuild
 				exec python3 /home/a3chron/nixos-config/horus/horus-log.py
 				;;
+			wa-connect)
+				# re-pair WhatsApp after WA revoked the linked device: wipes wa-auth,
+				# restarts only the bridge process (not the container), then follows
+				# bridge.log and redraws each QR as Baileys rotates it, until
+				# connected. No password needed (NOPASSWD covers everything it runs).
+				# Same impure-from-repo pattern as `log`. See horus-wa-connect.sh.
+				shift
+				exec ${pkgs.runtimeShell} /home/a3chron/nixos-config/horus/horus-wa-connect.sh "$@"
+				;;
 			grant)
 				# live-bind one of my ~/Projects into the running container so horus
 				# can work on it. machinectl bind is transient: it vanishes on the
@@ -257,7 +266,7 @@ let
 				esac
 				;;
 			*)
-				echo "usage: horus [chat|pause|resume|cancel|status|log|grant <project>|revoke <project>]" >&2
+				echo "usage: horus [chat|pause|resume|cancel|status|log|wa-connect|grant <project>|revoke <project>]" >&2
 				exit 1
 				;;
 			esac

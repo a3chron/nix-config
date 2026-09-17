@@ -36,21 +36,27 @@ let
 				# silently changeable by any flake bump. opencode sends no sampling params
 				# for custom providers (capabilities.temperature=false), so this is the
 				# single authoritative place.
-				cmd = ''
-					${llama-cpp}/bin/llama-server
-					--port ''${PORT}
-					-m ${modelsDir}/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf
-					--jinja
-					--flash-attn on
-					--cache-type-k q8_0
-					--cache-type-v q8_0
-					--ctx-size 65536
-					--n-gpu-layers 999
-					--n-cpu-moe 30
-					--temp 1.0
-					--top-p 0.95
-					--top-k 20
-				'';
+				# Args as a list -> the emitted YAML is a plain single-line scalar. A ''
+				# block leaks its leading tabs into the value (Nix strips common *space*
+				# indentation only), and llama-swap 249 rejects those escaped tabs:
+				# "found a tab character where an indentation space is expected". Older
+				# llama-swap parsed the identical file, so the 2026-09-01 flake bump
+				# surfaced it -- don't reintroduce a '' block here.
+				cmd = lib.concatStringsSep " " [
+					"${llama-cpp}/bin/llama-server"
+					"--port \${PORT}"
+					"-m ${modelsDir}/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
+					"--jinja"
+					"--flash-attn on"
+					"--cache-type-k q8_0"
+					"--cache-type-v q8_0"
+					"--ctx-size 65536"
+					"--n-gpu-layers 999"
+					"--n-cpu-moe 30"
+					"--temp 1.0"
+					"--top-p 0.95"
+					"--top-k 20"
+				];
 				ttl = 28800; # unload after 8h idle (4h evicted the model between afternoon and the 19:45-23:00 voice cluster — 7 of 9 evening rounds paid a ~60s cold start); heavy GPU work = `horus pause`
 			};
 		};

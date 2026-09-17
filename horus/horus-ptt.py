@@ -1,4 +1,7 @@
-# Horus PTT daemon: paddle-right (KEY_NEXTSONG) starts a voice query.
+# Horus PTT daemon: paddle-LEFT (KEY_PREVIOUSSONG) starts a voice query.
+# (Was paddle-right until 2026-09-03: Kurt skips songs far more often than he
+# goes back, and kept triggering Horus when he meant "next track". Paddle-right
+# now passes through to the media player like every other button.)
 # Recording auto-stops on trailing silence (the headset sends NO AVRCP button
 # events while in HFP mode, so a second press cannot be the stop signal).
 # Audio: explicit BT profile switch to HFP for the mic, restored afterwards;
@@ -19,7 +22,11 @@ from evdev import InputDevice, UInput, ecodes
 import horus_players
 
 DEVICE_NAME = "Nothing Headphone (1) (AVRCP)"
-PTT_KEY = ecodes.KEY_NEXTSONG  # paddle-right (the AI Button is silent on Linux)
+# paddle-left. The AI Button is NOT usable here: on Linux the headset exposes
+# only the AVRCP input device (paddle/roller) and a HID Sensors collection
+# (head-tracking IMU, no button usages); the AI Button speaks Nothing's
+# proprietary SPP protocol to the Nothing X app. See Horus.md "Buttons".
+PTT_KEY = ecodes.KEY_PREVIOUSSONG
 MAC = os.environ.get("HORUS_HEADPHONE_MAC", "3C:B0:ED:A7:8B:42")
 CARD = "bluez_card." + MAC.replace(":", "_")
 WAV = "/tmp/horus-voice.wav"
@@ -346,7 +353,13 @@ def main():
                     # cancelling press) so we don't immediately re-record
                     drain(dev)
             else:
-                ui.write_event(ev)  # pass through play/pause etc.
+                if ev.type == ecodes.EV_KEY and ev.value == 1:
+                    # diagnostic: log every OTHER button press the headset sends
+                    # (play/pause, paddle-right, ...) so the journal / `horus log`
+                    # shows whether a button reaches Linux at all (AI Button probe)
+                    name = ecodes.KEY.get(ev.code, ev.code)
+                    print(f"passthrough key {name}", flush=True)
+                ui.write_event(ev)  # pass through play/pause, paddle-right etc.
                 ui.syn()
     except OSError as e:
         # headphones disconnected while the grab was held — routine, not a

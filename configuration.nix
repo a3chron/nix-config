@@ -196,6 +196,27 @@
 	# udev rules for openrgb
 	services.udev.packages = [ pkgs.openrgb ];
 
+	# The RAM (ENE DRAM over SMBus) has no onboard memory, so it powers up in a
+	# random/rainbow mode on every boot -- the keyboard keeps its own state in
+	# firmware, which is why only the RAM drifted. Re-apply the saved profile
+	# once the i2c modules are up. openrgb wants a writable config dir, so the
+	# profile is copied out of the store into the unit's StateDirectory.
+	systemd.services.openrgb-profile = {
+		description = "Apply the greeny-blue OpenRGB profile";
+		after = [ "systemd-modules-load.service" ];
+		wantedBy = [ "multi-user.target" ];
+		serviceConfig = {
+			Type = "oneshot";
+			RemainAfterExit = true;
+			StateDirectory = "openrgb";
+			ExecStartPre = "${pkgs.coreutils}/bin/install -m644 ${./openrgb/greeny-blue.orp} /var/lib/openrgb/greeny-blue.orp";
+			ExecStart = "${pkgs.openrgb}/bin/openrgb --config /var/lib/openrgb --noautoconnect --profile greeny-blue";
+		};
+	};
+
+	# The RAM also forgets its colors across suspend/hibernate.
+	powerManagement.resumeCommands = "${pkgs.systemd}/bin/systemctl restart openrgb-profile.service";
+
 	programs.coolercontrol.enable = true;
 
   # All my unfree ones

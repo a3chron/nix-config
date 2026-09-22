@@ -16,6 +16,16 @@ let
 		export PATH=${lib.makeBinPath (with pkgs; [ jq git ncurses coreutils ])}''${PATH:+:}$PATH
 		${builtins.readFile ./claude/statusline.sh}
 	'';
+
+	# Wraps the status line to write its rate-limit block down for the
+	# chronogrid usage meter; the script's header explains why that payload is
+	# the only place those numbers exist. Wrapped for the same reason as above:
+	# Claude spawns it with a minimal environment, and a missing `mv` would
+	# drop the reading silently rather than complain.
+	claudeUsageSidecar = pkgs.writeShellScriptBin "claude-usage-sidecar" ''
+		export PATH=${lib.makeBinPath (with pkgs; [ coreutils ])}''${PATH:+:}$PATH
+		${builtins.readFile ./claude/usage-sidecar.sh}
+	'';
 in
 {
   home.username = "a3chron";
@@ -346,17 +356,24 @@ in
 	# straight at the store) keeps the store hash out of settings.json, so a
 	# rebuild + GC can't leave the setting dangling.
 	home.file.".claude/statusline.sh".source = "${claudeStatusline}/bin/claude-statusline";
+	home.file.".claude/usage-sidecar.sh".source = "${claudeUsageSidecar}/bin/claude-usage-sidecar";
 
 	# settings.json is read-write for Claude itself (/config writes model, theme,
 	# effort back to it), so it can't be a read-only nix symlink. Merge just the
 	# statusLine key in and leave every other key untouched.
+	#
+	# Points at the SIDECAR, which writes the rate-limit block down and then
+	# chains to statusline.sh. Pointing it straight at statusline.sh is exactly
+	# what this rewrite did on 2026-09-22, and it froze the chronogrid usage
+	# meter for half a day with no visible symptom — the status line went on
+	# drawing its own bar from the same payload, so nothing looked wrong.
 	home.activation.claudeStatusline = lib.hm.dag.entryAfter ["writeBoundary"] ''
 		settings="$HOME/.claude/settings.json"
 		mkdir -p "$HOME/.claude"
 		[ -s "$settings" ] || echo '{}' > "$settings"
 
 		tmp=$(mktemp)
-		if ${pkgs.jq}/bin/jq --arg cmd "$HOME/.claude/statusline.sh" \
+		if ${pkgs.jq}/bin/jq --arg cmd "$HOME/.claude/usage-sidecar.sh" \
 				'.statusLine = { type: "command", command: $cmd, padding: 0 }' \
 				"$settings" > "$tmp" 2>/dev/null; then
 			cat "$tmp" > "$settings"
